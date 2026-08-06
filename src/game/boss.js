@@ -102,7 +102,11 @@ export function facePiecePosition(piece, boss, config = APPARATUS_CONFIG) {
 }
 
 export function tentacleSegmentPosition(tentacle, segment, boss, config = APPARATUS_CONFIG) {
-  const segmentProgress = (segment.segmentIndex + 1) / tentacle.segments.length
+  const livingSegments = tentacle.segments.filter((candidate) => candidate.alive)
+  const livingIndex = livingSegments.findIndex((candidate) => candidate.id === segment.id)
+  const segmentProgress = livingIndex >= 0
+    ? (livingIndex + 1) / livingSegments.length
+    : (segment.segmentIndex + 1) / tentacle.segments.length
   const reach = 0.16 + tentacle.extension * 0.84
   const pathProgress = segmentProgress * reach
   const time = boss?.elapsed ?? 0
