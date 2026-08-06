@@ -353,7 +353,7 @@ export default function ApparatusRun({ onReturn }) {
         })
       }
 
-      window.setTimeout(beginReload, 55)
+      beginReload()
     },
     [audio, beginReload],
   )
