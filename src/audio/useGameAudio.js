@@ -77,6 +77,10 @@ function noise(
 }
 
 export default function useGameAudio() {
+  const unlock = useCallback(() => {
+    audioContext()
+  }, [])
+
   const playStep = useCallback((alternate = false) => {
     const context = audioContext()
     if (!context) return
@@ -155,6 +159,7 @@ export default function useGameAudio() {
 
   return useMemo(
     () => ({
+      unlock,
       playStep,
       playEnter,
       playShot,
@@ -166,6 +171,7 @@ export default function useGameAudio() {
       playOverload,
     }),
     [
+      unlock,
       playStep,
       playEnter,
       playShot,
