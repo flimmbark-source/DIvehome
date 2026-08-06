@@ -14,11 +14,13 @@ import {
   totalShapes,
   unloadFurnitureFuel,
 } from './game/progression.js'
+import { emptyWeaponState, setWeaponFireMode } from './game/weapon.js'
 
 const INITIAL_PROGRESSION = Object.freeze({
   inventory: emptyShapeInventory(),
   built: emptyFurnitureState(),
   fuel: emptyFuelState(),
+  weapon: emptyWeaponState(),
   mechanismUnlocked: false,
 })
 
@@ -82,6 +84,9 @@ export default function App() {
         }
         onClearFuel={(furnitureId) =>
           setProgression((current) => unloadFurnitureFuel(current, furnitureId))
+        }
+        onWeaponFireMode={(fireMode) =>
+          setProgression((current) => setWeaponFireMode(current, fireMode))
         }
       />
 
