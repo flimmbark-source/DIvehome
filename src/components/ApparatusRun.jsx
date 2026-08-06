@@ -13,6 +13,7 @@ const ENEMY_COLORS = Object.freeze(
 )
 const FORWARD = new THREE.Vector3(0, 0, -1)
 const RIGHT = new THREE.Vector3(1, 0, 0)
+const FAR_AIM_DEPTH = 1
 
 function Tunnel({ runRef }) {
   const ringsRef = useRef([])
@@ -178,7 +179,9 @@ function GunModel({ shotPulse, aimRef, reloading }) {
       .add(camera.position)
     group.position.lerp(transforms.targetPosition, 1 - Math.exp(-delta * 28))
 
-    transforms.targetPoint.set(smoothedAim.x, smoothedAim.y, 0.42).unproject(camera)
+    // Aim at the far end of the pointer ray. Mid-depth NDC points can sit
+    // behind the muzzle and make the weapon rotate back toward the player.
+    transforms.targetPoint.set(smoothedAim.x, smoothedAim.y, FAR_AIM_DEPTH).unproject(camera)
     transforms.direction.copy(transforms.targetPoint).sub(group.position).normalize()
     transforms.aimQuaternion.setFromUnitVectors(FORWARD, transforms.direction)
     transforms.rollQuaternion.setFromAxisAngle(FORWARD, reloadPose * 0.42 - smoothedAim.x * 0.035)
