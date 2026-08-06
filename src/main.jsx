@@ -4,6 +4,7 @@ import App from './App.jsx'
 import './styles.css'
 import './furniture.css'
 import './boss.css'
+import './difficulty.css'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
