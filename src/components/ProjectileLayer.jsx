@@ -2,12 +2,18 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { APPARATUS_CONFIG } from '../game/config.js'
-import { segmentIntersectsSphere } from '../game/projectileMath.js'
+import {
+  raySphereIntersectionDistance,
+  segmentIntersectsSphere,
+} from '../game/projectileMath.js'
 import { isCombatPhase } from '../game/simulation.js'
 import { combatTargets } from '../game/targets.js'
+import { normalizeFireMode } from '../game/weapon.js'
 
 const FORWARD = new THREE.Vector3(0, 0, -1)
+const UP = new THREE.Vector3(0, 1, 0)
 const FAR_AIM_DEPTH = 1
+const HITSCAN_RANGE = 84
 
 function targetDistanceSquared(target, point) {
   const dx = target.position.x - point.x
@@ -39,13 +45,42 @@ function ProjectileVisual({ projectileId, projectilesRef, meshRefs }) {
   )
 }
 
+function HitscanTracerVisual({ tracerId, tracersRef }) {
+  const tracer = tracersRef.current.get(tracerId)
+  const transform = useMemo(() => {
+    if (!tracer) return null
+    const direction = tracer.end.clone().sub(tracer.start)
+    const length = direction.length()
+    const midpoint = tracer.start.clone().add(tracer.end).multiplyScalar(0.5)
+    const quaternion = new THREE.Quaternion().setFromUnitVectors(UP, direction.normalize())
+    return { length, midpoint, quaternion }
+  }, [tracer])
+
+  if (!tracer || !transform) return null
+  return (
+    <mesh position={transform.midpoint} quaternion={transform.quaternion} renderOrder={35}>
+      <cylinderGeometry args={[0.022, 0.052, transform.length, 5]} />
+      <meshBasicMaterial
+        color="#7bffe0"
+        transparent
+        opacity={0.88}
+        depthWrite={false}
+        toneMapped={false}
+      />
+    </mesh>
+  )
+}
+
 export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit }) {
   const { camera, size } = useThree()
   const projectilesRef = useRef(new Map())
   const meshRefs = useRef(new Map())
+  const tracersRef = useRef(new Map())
   const [ids, setIds] = useState([])
+  const [tracerIds, setTracerIds] = useState([])
   const lastShotRef = useRef(null)
   const nextIdRef = useRef(1)
+  const nextTracerIdRef = useRef(1)
   const scratch = useMemo(
     () => ({
       muzzle: new THREE.Vector3(),
@@ -71,9 +106,50 @@ export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit })
       .set(0.42 + aim.x * 0.44, -0.42 + aim.y * 0.3, -1.62)
       .applyQuaternion(camera.quaternion)
       .add(camera.position)
-
     scratch.target.set(aim.x, aim.y, FAR_AIM_DEPTH).unproject(camera)
     scratch.direction.copy(scratch.target).sub(scratch.muzzle).normalize()
+
+    const fireMode = normalizeFireMode(shotRequest.mode ?? loadout?.fireMode)
+    if (fireMode === 'hitscan') {
+      const intersections = combatTargets(runRef.current)
+        .map((target) => {
+          scratch.targetPosition.set(target.position.x, target.position.y, target.position.z)
+          const distance = raySphereIntersectionDistance(
+            scratch.muzzle,
+            scratch.direction,
+            scratch.targetPosition,
+            target.hitRadius + 0.045,
+          )
+          return distance == null ? null : { target, distance }
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.distance - b.distance)
+
+      const maximumHits = 1 + Math.max(0, loadout?.projectilePierceBonus ?? 0)
+      const resolvedHits = intersections.slice(0, maximumHits)
+      let tracerDistance = HITSCAN_RANGE
+
+      for (const hit of resolvedHits) {
+        tracerDistance = Math.max(tracerDistance === HITSCAN_RANGE ? 0 : tracerDistance, hit.distance)
+        scratch.targetPosition.set(hit.target.position.x, hit.target.position.y, hit.target.position.z)
+        scratch.projected.copy(scratch.targetPosition).project(camera)
+        onHit(hit.target, {
+          x: (scratch.projected.x * 0.5 + 0.5) * size.width,
+          y: (-scratch.projected.y * 0.5 + 0.5) * size.height,
+        })
+      }
+
+      const tracerId = `hitscan-${nextTracerIdRef.current}`
+      nextTracerIdRef.current += 1
+      tracersRef.current.set(tracerId, {
+        id: tracerId,
+        start: scratch.muzzle.clone(),
+        end: scratch.muzzle.clone().addScaledVector(scratch.direction, tracerDistance),
+        age: 0,
+      })
+      setTracerIds([...tracersRef.current.keys()])
+      return
+    }
 
     const id = `projectile-${nextIdRef.current}`
     nextIdRef.current += 1
@@ -89,17 +165,25 @@ export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit })
       hitIds: new Set(),
     })
     setIds([...projectilesRef.current.keys()])
-  }, [camera, loadout, runRef, scratch, shotRequest])
+  }, [camera, loadout, onHit, runRef, scratch, shotRequest, size.height, size.width])
 
   useFrame((_, rawDelta) => {
     const delta = Math.min(rawDelta, 0.05)
     const run = runRef.current
     let changed = false
+    let tracersChanged = false
 
     if (!isCombatPhase(run) && projectilesRef.current.size) {
       projectilesRef.current.clear()
       setIds([])
-      return
+    }
+
+    for (const [tracerId, tracer] of tracersRef.current) {
+      tracer.age += delta
+      if (tracer.age >= 0.085) {
+        tracersRef.current.delete(tracerId)
+        tracersChanged = true
+      }
     }
 
     for (const [id, projectile] of projectilesRef.current) {
@@ -173,6 +257,7 @@ export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit })
     }
 
     if (changed) setIds([...projectilesRef.current.keys()])
+    if (tracersChanged) setTracerIds([...tracersRef.current.keys()])
   })
 
   return (
@@ -184,6 +269,9 @@ export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit })
           projectilesRef={projectilesRef}
           meshRefs={meshRefs}
         />
+      ))}
+      {tracerIds.map((id) => (
+        <HitscanTracerVisual key={id} tracerId={id} tracersRef={tracersRef} />
       ))}
     </group>
   )
