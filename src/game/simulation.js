@@ -1,4 +1,5 @@
 import { APPARATUS_CONFIG, ENEMY_PATTERNS } from './config.js'
+import { emptyShapeInventory } from './progression.js'
 
 function mulberry32(seed) {
   let value = seed >>> 0
@@ -11,16 +12,21 @@ function mulberry32(seed) {
   }
 }
 
-export function createRun(seed = Date.now(), config = APPARATUS_CONFIG) {
+export function createRun(seed = Date.now(), config = APPARATUS_CONFIG, loadout = {}) {
+  const maxHp = config.STARTING_HP + Math.max(0, loadout.maxHpBonus ?? 0)
   return {
     phase: 'running',
     elapsed: 0,
     travelDistance: 0,
     nextSpawnAt: 0.65,
     nextId: 1,
-    hp: config.STARTING_HP,
+    hp: maxHp,
+    maxHp,
+    shield: Math.max(0, loadout.startingShield ?? 0),
+    blocks: 0,
     kills: 0,
     hitsTaken: 0,
+    shapeDrops: emptyShapeInventory(),
     enemies: [],
     seed: seed >>> 0,
   }
@@ -106,6 +112,8 @@ export function advanceRun(state, deltaSeconds, config = APPARATUS_CONFIG) {
   }
 
   let hp = state.hp
+  let shield = state.shield ?? 0
+  let blocks = state.blocks ?? 0
   let hitsTaken = state.hitsTaken
 
   enemies = enemies.map((enemy) => {
@@ -116,8 +124,13 @@ export function advanceRun(state, deltaSeconds, config = APPARATUS_CONFIG) {
 
     const parkedOffset = patternOffset(enemy, config.INTERACTION_DISTANCE, elapsed)
     if (!enemy.hasDamaged) {
-      hp -= 1
-      hitsTaken += 1
+      if (shield > 0) {
+        shield -= 1
+        blocks += 1
+      } else {
+        hp -= 1
+        hitsTaken += 1
+      }
     }
 
     return {
@@ -137,6 +150,8 @@ export function advanceRun(state, deltaSeconds, config = APPARATUS_CONFIG) {
     nextId,
     seed,
     hp: Math.max(0, hp),
+    shield,
+    blocks,
     hitsTaken,
     enemies,
   }
@@ -144,15 +159,19 @@ export function advanceRun(state, deltaSeconds, config = APPARATUS_CONFIG) {
 
 export function shootEnemy(state, enemyId) {
   if (state.phase !== 'running' || !enemyId) return state
-  const exists = state.enemies.some((enemy) => enemy.id === enemyId)
-  if (!exists) return state
+  const enemy = state.enemies.find((candidate) => candidate.id === enemyId)
+  if (!enemy) return state
   return {
     ...state,
     kills: state.kills + 1,
-    enemies: state.enemies.filter((enemy) => enemy.id !== enemyId),
+    shapeDrops: {
+      ...state.shapeDrops,
+      [enemy.pattern]: (state.shapeDrops?.[enemy.pattern] ?? 0) + 1,
+    },
+    enemies: state.enemies.filter((candidate) => candidate.id !== enemyId),
   }
 }
 
-export function prototypePayout(state) {
-  return state.kills
+export function shapePayout(state) {
+  return { ...emptyShapeInventory(), ...state.shapeDrops }
 }
