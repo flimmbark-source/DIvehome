@@ -7,6 +7,7 @@ import {
 import { FIRE_MODES, fireModeFor } from '../game/weapon.js'
 
 const PARTS = Object.freeze(['body', 'clip', 'muzzle'])
+const PREVIEW_MODES = Object.freeze(['holster', 'apparatus'])
 
 function nextIndex(current, direction, length) {
   return (current + direction + length) % length
@@ -91,12 +92,24 @@ export default function GunCustomizer({
   const [activePart, setActivePart] = useState('body')
   const [bodyIndex, setBodyIndex] = useState(() => initialShapeIndex(loadedBodyShape))
   const [clipIndex, setClipIndex] = useState(() => initialShapeIndex(loadedClipShape))
+  const [previewMode, setPreviewMode] = useState('holster')
   const rootRef = useRef(null)
 
   const selectedBodyShape = SHAPE_KEYS[bodyIndex]
   const selectedClipShape = SHAPE_KEYS[clipIndex]
   const currentMode = fireModeFor(progression.weapon?.fireMode)
   const modeIndex = FIRE_MODES.indexOf(currentMode.id)
+
+  const selectPreview = useCallback((mode) => {
+    const nextMode = mode === 'apparatus' ? 'apparatus' : 'holster'
+    setPreviewMode(nextMode)
+    window.dispatchEvent(new CustomEvent('divehome-weapon-preview', { detail: nextMode }))
+  }, [])
+
+  const cyclePreview = useCallback(() => {
+    const index = PREVIEW_MODES.indexOf(previewMode)
+    selectPreview(PREVIEW_MODES[nextIndex(index, 1, PREVIEW_MODES.length)])
+  }, [previewMode, selectPreview])
 
   const cyclePart = useCallback((direction) => {
     setActivePart((current) => PARTS[nextIndex(PARTS.indexOf(current), direction, PARTS.length)])
@@ -145,7 +158,8 @@ export default function GunCustomizer({
 
   useEffect(() => {
     rootRef.current?.focus()
-  }, [])
+    selectPreview('holster')
+  }, [selectPreview])
 
   const modeDescription = useMemo(() => {
     if (currentMode.id === 'hitscan') {
@@ -157,7 +171,7 @@ export default function GunCustomizer({
   return (
     <section
       ref={rootRef}
-      className="gun-customizer"
+      className={`gun-customizer preview-${previewMode}`}
       tabIndex={-1}
       aria-label="Gun customization"
       onKeyDownCapture={(event) => {
@@ -182,6 +196,10 @@ export default function GunCustomizer({
           event.preventDefault()
           cycleMode(1)
         }
+        if (event.code === 'KeyV' || event.code === 'Tab') {
+          event.preventDefault()
+          cyclePreview()
+        }
         if (event.code === 'Enter' || event.code === 'KeyE') {
           event.preventDefault()
           confirmActive()
@@ -202,10 +220,27 @@ export default function GunCustomizer({
       </svg>
 
       <header className="gun-customizer-heading">
-        <span>APPARATUS SIDEARM</span>
-        <strong>CONFIGURE WEAPON</strong>
+        <span>APPARATUS ARMATURE</span>
+        <strong>CONFIGURE FORMS</strong>
         <button type="button" onClick={onClose}>BACKSPACE</button>
       </header>
+
+      <nav className="weapon-preview-switch" aria-label="Weapon form preview">
+        <button
+          type="button"
+          className={previewMode === 'holster' ? 'is-active' : ''}
+          onClick={() => selectPreview('holster')}
+        >
+          HOLSTER VIEW
+        </button>
+        <button
+          type="button"
+          className={previewMode === 'apparatus' ? 'is-active' : ''}
+          onClick={() => selectPreview('apparatus')}
+        >
+          APPARATUS VIEW
+        </button>
+      </nav>
 
       <ResourceCallout
         active={activePart === 'body'}
@@ -263,7 +298,7 @@ export default function GunCustomizer({
       </article>
 
       <footer className="gun-customizer-help">
-        <span>W / S SELECT PART · A / D CHANGE · E LOAD · M SWITCH MODE · BACKSPACE CLOSE</span>
+        <span>V / TAB SWITCH VIEW · W / S SELECT PART · A / D CHANGE · E LOAD · M SWITCH MODE · BACKSPACE CLOSE</span>
       </footer>
     </section>
   )
