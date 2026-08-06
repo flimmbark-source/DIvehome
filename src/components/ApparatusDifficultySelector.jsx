@@ -22,12 +22,14 @@ export default function ApparatusDifficultySelector({ initialLevel = 0, onStart,
   }, [])
 
   return (
-    <section
+    <div
       ref={rootRef}
-      className="apparatus-difficulty-selector"
+      className="difficulty-overlay"
       tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
       aria-label="Apparatus difficulty selection"
-      style={{ '--difficulty-color': difficulty.color }}
+      onPointerDown={(event) => event.stopPropagation()}
       onKeyDownCapture={(event) => {
         event.stopPropagation()
         if (event.code === 'ArrowLeft') {
@@ -48,52 +50,57 @@ export default function ApparatusDifficultySelector({ initialLevel = 0, onStart,
         }
       }}
     >
-      <div className="difficulty-heading">
-        <span>THE APPARATUS</span>
-        <strong>SET DESCENT PRESSURE</strong>
-      </div>
-
-      <div className="difficulty-picker">
-        <button type="button" onClick={() => cycle(-1)} aria-label="Lower difficulty">
-          ‹
-        </button>
-
-        <div className="difficulty-card" aria-live="polite">
-          <span className="difficulty-number">
-            {difficulty.level === 0 ? '0' : `+${difficulty.level}`}
-          </span>
-          <strong>{difficulty.label}</strong>
-          <p>{difficulty.description}</p>
-
-          <div className="difficulty-stats">
-            <span>
-              <small>WAVE SIZE</small>
-              <b>{difficulty.waveSizeBonus === 0 ? 'CURRENT' : `+${difficulty.waveSizeBonus}`}</b>
-            </span>
-            <span>
-              <small>WAVE TEMPO</small>
-              <b>{difficulty.level === 0 ? 'CURRENT' : `${Math.round((1 - difficulty.waveIntervalMultiplier) * 100)}% FASTER`}</b>
-            </span>
-            <span>
-              <small>BOSS TEMPO</small>
-              <b>{difficulty.level === 0 ? 'CURRENT' : `${Math.round((difficulty.bossTempoMultiplier - 1) * 100)}% FASTER`}</b>
-            </span>
-            <span>
-              <small>SHAPE YIELD</small>
-              <b>{difficulty.resourceMultiplier}×</b>
-            </span>
-          </div>
+      <section
+        className="apparatus-difficulty-selector"
+        style={{ '--difficulty-color': difficulty.color }}
+      >
+        <div className="difficulty-heading">
+          <span>THE APPARATUS</span>
+          <strong>SET DESCENT PRESSURE</strong>
         </div>
 
-        <button type="button" onClick={() => cycle(1)} aria-label="Raise difficulty">
-          ›
-        </button>
-      </div>
+        <div className="difficulty-picker">
+          <button type="button" onClick={() => cycle(-1)} aria-label="Lower difficulty">
+            ‹
+          </button>
 
-      <div className="difficulty-actions">
-        <span>← → ADJUST · E / ENTER DESCEND · ESC CANCEL</span>
-        <button type="button" onClick={start}>BEGIN DESCENT</button>
-      </div>
-    </section>
+          <div className="difficulty-card" aria-live="polite">
+            <span className="difficulty-number">
+              {difficulty.level === 0 ? '0' : `+${difficulty.level}`}
+            </span>
+            <strong>{difficulty.label}</strong>
+            <p>{difficulty.description}</p>
+
+            <div className="difficulty-stats">
+              <span>
+                <small>WAVE SIZE</small>
+                <b>{difficulty.waveSizeBonus === 0 ? 'CURRENT' : `+${difficulty.waveSizeBonus}`}</b>
+              </span>
+              <span>
+                <small>WAVE TEMPO</small>
+                <b>{difficulty.level === 0 ? 'CURRENT' : `${Math.round((1 - difficulty.waveIntervalMultiplier) * 100)}% FASTER`}</b>
+              </span>
+              <span>
+                <small>BOSS TEMPO</small>
+                <b>{difficulty.level === 0 ? 'CURRENT' : `${Math.round((difficulty.bossTempoMultiplier - 1) * 100)}% FASTER`}</b>
+              </span>
+              <span>
+                <small>SHAPE YIELD</small>
+                <b>{difficulty.resourceMultiplier}×</b>
+              </span>
+            </div>
+          </div>
+
+          <button type="button" onClick={() => cycle(1)} aria-label="Raise difficulty">
+            ›
+          </button>
+        </div>
+
+        <div className="difficulty-actions">
+          <span>← → ADJUST · E / ENTER DESCEND · ESC CANCEL</span>
+          <button type="button" onClick={start}>BEGIN DESCENT</button>
+        </div>
+      </section>
+    </div>
   )
 }
