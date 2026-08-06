@@ -47,10 +47,6 @@ export default function App() {
       difficultyLevel: difficulty.level,
       effects: [...(prepared.loadout.effects ?? []), difficultyEffectLabel(difficulty.level)],
     })
-
-    // The descent currently uses absolute cursor aiming. Keep pointer lock for
-    // every White Space interface, and release it only for this deliberate mode change.
-    document.exitPointerLock?.()
     setMode('apparatus')
   }
 
