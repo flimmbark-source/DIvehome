@@ -13,11 +13,20 @@ const WORKBENCH_POSITION = new THREE.Vector3(-3.65, 0, -1.65)
 const PLAYER_HEIGHT = 1.62
 const PLAYER_SPEED = 3.1
 
-function PlayerRig({ mechanismUnlocked, built, controlsEnabled, onFocusChange, onStep, onUnlockAudio }) {
+function PlayerRig({
+  mechanismUnlocked,
+  built,
+  controlsEnabled,
+  roomPoseRef,
+  onFocusChange,
+  onStep,
+  onUnlockAudio,
+}) {
   const { camera, gl } = useThree()
+  const initialPose = roomPoseRef.current
   const keysRef = useRef(new Set())
-  const yawRef = useRef(0)
-  const pitchRef = useRef(-0.04)
+  const yawRef = useRef(initialPose?.yaw ?? 0)
+  const pitchRef = useRef(initialPose?.pitch ?? -0.04)
   const focusRef = useRef(null)
   const stepDistanceRef = useRef(0)
   const stepPhaseRef = useRef(0)
@@ -26,10 +35,27 @@ function PlayerRig({ mechanismUnlocked, built, controlsEnabled, onFocusChange, o
   const rightRef = useRef(new THREE.Vector3())
   const movementRef = useRef(new THREE.Vector3())
 
+  // Camera initialization is intentionally independent from controlsEnabled.
+  // Opening an interface disables input, but must never reset the player pose.
   useEffect(() => {
-    camera.position.set(0, PLAYER_HEIGHT, 3.4)
+    const pose = roomPoseRef.current ?? { x: 0, z: 3.4, yaw: 0, pitch: -0.04 }
+    yawRef.current = pose.yaw
+    pitchRef.current = pose.pitch
+    camera.position.set(pose.x, PLAYER_HEIGHT, pose.z)
     camera.rotation.order = 'YXZ'
+    camera.rotation.set(pose.pitch, pose.yaw, 0)
 
+    return () => {
+      roomPoseRef.current = {
+        x: camera.position.x,
+        z: camera.position.z,
+        yaw: yawRef.current,
+        pitch: pitchRef.current,
+      }
+    }
+  }, [camera, roomPoseRef])
+
+  useEffect(() => {
     const onKeyDown = (event) => {
       if (['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(event.code)) event.preventDefault()
       if (controlsEnabled) keysRef.current.add(event.code)
@@ -44,6 +70,8 @@ function PlayerRig({ mechanismUnlocked, built, controlsEnabled, onFocusChange, o
         -1.15,
         1.15,
       )
+      roomPoseRef.current.yaw = yawRef.current
+      roomPoseRef.current.pitch = pitchRef.current
     }
     const requestLock = (event) => {
       if (event.button !== 0 || document.pointerLockElement || !controlsEnabled) return
@@ -64,7 +92,7 @@ function PlayerRig({ mechanismUnlocked, built, controlsEnabled, onFocusChange, o
       window.removeEventListener('mousemove', onMouseMove)
       gl.domElement.removeEventListener('pointerdown', requestLock)
     }
-  }, [camera, controlsEnabled, gl, onUnlockAudio])
+  }, [controlsEnabled, gl, onUnlockAudio, roomPoseRef])
 
   useEffect(() => {
     if (!controlsEnabled) keysRef.current.clear()
@@ -107,6 +135,11 @@ function PlayerRig({ mechanismUnlocked, built, controlsEnabled, onFocusChange, o
       camera.position.y = THREE.MathUtils.damp(camera.position.y, PLAYER_HEIGHT, 12, delta)
       camera.rotation.z = THREE.MathUtils.damp(camera.rotation.z, 0, 12, delta)
     }
+
+    roomPoseRef.current.x = camera.position.x
+    roomPoseRef.current.z = camera.position.z
+    roomPoseRef.current.yaw = yawRef.current
+    roomPoseRef.current.pitch = pitchRef.current
 
     const targets = [{ id: 'apparatus', position: APPARATUS_POSITION, reach: 2.65 }]
     if (mechanismUnlocked) targets.push({ id: 'assembler', position: ASSEMBLER_POSITION, reach: 2.45 })
@@ -311,7 +344,14 @@ function WhiteRoom({ focusId, activeInterface, progression }) {
   )
 }
 
-export default function WhiteSpace({ progression, onUseApparatus, onCraft, onFuel, onClearFuel }) {
+export default function WhiteSpace({
+  progression,
+  roomPoseRef,
+  onUseApparatus,
+  onCraft,
+  onFuel,
+  onClearFuel,
+}) {
   const [focusId, setFocusId] = useState(null)
   const [pointerLocked, setPointerLocked] = useState(Boolean(document.pointerLockElement))
   const [activeInterface, setActiveInterface] = useState(null)
@@ -388,6 +428,7 @@ export default function WhiteSpace({ progression, onUseApparatus, onCraft, onFue
           mechanismUnlocked={progression.mechanismUnlocked}
           built={progression.built}
           controlsEnabled={!interfaceOpen}
+          roomPoseRef={roomPoseRef}
           onFocusChange={setFocusId}
           onStep={audio.playStep}
           onUnlockAudio={audio.unlock}
