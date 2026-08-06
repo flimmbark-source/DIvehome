@@ -155,7 +155,24 @@ export function bossCombatTargets(boss, config = APPARATUS_CONFIG) {
   return targets
 }
 
-export function advanceBoss(boss, deltaSeconds, config = APPARATUS_CONFIG) {
+function tentacleContactsCraft(tentacle, boss, craftPosition, config) {
+  const livingSegments = tentacle.segments.filter((segment) => segment.alive)
+  const tip = livingSegments[livingSegments.length - 1]
+  if (!tip) return false
+  const reachingTentacle = { ...tentacle, extension: 1 }
+  const position = tentacleSegmentPosition(reachingTentacle, tip, boss, config)
+  const dx = position.x - (craftPosition?.x ?? 0)
+  const dy = position.y - (craftPosition?.y ?? 0)
+  const radius = config.CRAFT_HIT_RADIUS + config.BOSS_TENTACLE_PIECE_RADIUS
+  return dx * dx + dy * dy <= radius * radius
+}
+
+export function advanceBoss(
+  boss,
+  deltaSeconds,
+  config = APPARATUS_CONFIG,
+  craftPosition = { x: 0, y: 0 },
+) {
   if (!boss || boss.defeated) return { boss, attacks: 0 }
 
   const difficulty = difficultyFor(boss.difficultyLevel)
@@ -167,6 +184,7 @@ export function advanceBoss(boss, deltaSeconds, config = APPARATUS_CONFIG) {
 
   let attacks = 0
   const tentacleTravelSeconds = config.BOSS_TENTACLE_TRAVEL_SECONDS / difficulty.bossTempoMultiplier
+  const bossAtElapsed = { ...boss, elapsed }
   const tentacles = boss.tentacles.map((tentacle, tentacleIndex) => {
     if (tentacle.destroyed) return tentacle
 
@@ -177,7 +195,9 @@ export function advanceBoss(boss, deltaSeconds, config = APPARATUS_CONFIG) {
     if (cooldown <= 0) {
       extension += delta / tentacleTravelSeconds
       if (extension >= 1) {
-        attacks += 1
+        if (tentacleContactsCraft({ ...tentacle, extension: 1 }, bossAtElapsed, craftPosition, config)) {
+          attacks += 1
+        }
         attackPulse += 1
         extension = 0.08
         cooldown =
