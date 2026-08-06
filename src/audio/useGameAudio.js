@@ -157,6 +157,32 @@ export default function useGameAudio() {
     noise(context, { duration: 0.7, gain: 0.065, filterType: 'lowpass', frequency: 900 })
   }, [])
 
+  const playBossArrival = useCallback(() => {
+    const context = audioContext()
+    if (!context) return
+    tone(context, { frequency: 58, endFrequency: 34, duration: 1.05, gain: 0.12, type: 'sawtooth' })
+    tone(context, { frequency: 110, endFrequency: 260, duration: 0.72, gain: 0.065, type: 'square', delay: 0.18 })
+    tone(context, { frequency: 165, endFrequency: 390, duration: 0.62, gain: 0.045, type: 'triangle', delay: 0.34 })
+    noise(context, { duration: 0.9, gain: 0.05, filterType: 'lowpass', frequency: 520 })
+  }, [])
+
+  const playTentacleBreak = useCallback(() => {
+    const context = audioContext()
+    if (!context) return
+    noise(context, { duration: 0.24, gain: 0.11, filterType: 'bandpass', frequency: 680 })
+    tone(context, { frequency: 520, endFrequency: 72, duration: 0.31, gain: 0.095, type: 'sawtooth' })
+    tone(context, { frequency: 180, endFrequency: 92, duration: 0.22, gain: 0.07, type: 'square', delay: 0.08 })
+  }, [])
+
+  const playBossVictory = useCallback(() => {
+    const context = audioContext()
+    if (!context) return
+    tone(context, { frequency: 82, endFrequency: 41, duration: 0.55, gain: 0.1, type: 'sawtooth' })
+    tone(context, { frequency: 220, endFrequency: 440, duration: 0.42, gain: 0.065, type: 'triangle', delay: 0.16 })
+    tone(context, { frequency: 330, endFrequency: 660, duration: 0.48, gain: 0.05, type: 'square', delay: 0.28 })
+    noise(context, { duration: 0.42, gain: 0.045, filterType: 'highpass', frequency: 1300, delay: 0.12 })
+  }, [])
+
   return useMemo(
     () => ({
       unlock,
@@ -169,6 +195,9 @@ export default function useGameAudio() {
       playEnemyHit,
       playDamage,
       playOverload,
+      playBossArrival,
+      playTentacleBreak,
+      playBossVictory,
     }),
     [
       unlock,
@@ -181,6 +210,9 @@ export default function useGameAudio() {
       playEnemyHit,
       playDamage,
       playOverload,
+      playBossArrival,
+      playTentacleBreak,
+      playBossVictory,
     ],
   )
 }
