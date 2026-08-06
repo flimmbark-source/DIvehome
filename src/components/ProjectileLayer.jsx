@@ -3,6 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { APPARATUS_CONFIG } from '../game/config.js'
 import { enemyWorldPosition } from '../game/world.js'
+import { segmentIntersectsSphere } from '../game/projectileMath.js'
 
 const FORWARD = new THREE.Vector3(0, 0, -1)
 
@@ -29,14 +30,6 @@ function ProjectileVisual({ projectileId, projectilesRef, meshRefs }) {
   )
 }
 
-function distanceToSegmentSquared(point, start, end, scratch) {
-  const segment = scratch.segment.copy(end).sub(start)
-  const lengthSquared = Math.max(segment.lengthSq(), 0.000001)
-  const t = THREE.MathUtils.clamp(scratch.toPoint.copy(point).sub(start).dot(segment) / lengthSquared, 0, 1)
-  scratch.closest.copy(start).addScaledVector(segment, t)
-  return scratch.closest.distanceToSquared(point)
-}
-
 export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit }) {
   const { camera, size } = useThree()
   const projectilesRef = useRef(new Map())
@@ -54,9 +47,6 @@ export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit })
       enemy: new THREE.Vector3(),
       projected: new THREE.Vector3(),
       desired: new THREE.Vector3(),
-      segment: new THREE.Vector3(),
-      toPoint: new THREE.Vector3(),
-      closest: new THREE.Vector3(),
       quaternion: new THREE.Quaternion(),
     }),
     [],
@@ -142,9 +132,7 @@ export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit })
         const world = enemyWorldPosition(enemy, runRef.current)
         scratch.enemy.set(world.x, world.y, world.z)
         const hitRadius = APPARATUS_CONFIG.ENEMY_HIT_RADIUS + projectile.radius
-        if (distanceToSegmentSquared(scratch.enemy, scratch.start, scratch.end, scratch) > hitRadius * hitRadius) {
-          continue
-        }
+        if (!segmentIntersectsSphere(scratch.start, scratch.end, scratch.enemy, hitRadius)) continue
 
         projectile.hitIds.add(enemy.id)
         scratch.projected.copy(scratch.enemy).project(camera)
