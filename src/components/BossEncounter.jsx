@@ -1,6 +1,7 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
+import useGameAudio from '../audio/useGameAudio.js'
 import { APPARATUS_CONFIG } from '../game/config.js'
 import {
   facePiecePosition,
@@ -115,24 +116,34 @@ function BossAura({ runRef }) {
   const ringRef = useRef()
   const leftEyeRef = useRef()
   const rightEyeRef = useRef()
+  const lastBreakRef = useRef(0)
+  const breakKickRef = useRef(0)
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, rawDelta) => {
     const boss = runRef.current.boss
     const group = groupRef.current
     if (!boss || !group) return
+
+    if (boss.tentacleBreakPulse !== lastBreakRef.current) {
+      lastBreakRef.current = boss.tentacleBreakPulse
+      breakKickRef.current = 1
+    }
+    const delta = Math.min(rawDelta, 0.05)
+    breakKickRef.current = THREE.MathUtils.damp(breakKickRef.current, 0, 7.5, delta)
 
     const intro = THREE.MathUtils.smoothstep(
       boss.elapsed,
       0,
       APPARATUS_CONFIG.BOSS_INTRO_SECONDS,
     )
-    group.scale.setScalar(Math.max(0.001, intro))
+    group.scale.setScalar(Math.max(0.001, intro * (1 + breakKickRef.current * 0.14)))
     group.position.z = APPARATUS_CONFIG.BOSS_FACE_Z + 0.28
+    group.rotation.z = Math.sin(clock.elapsedTime * 0.8) * 0.012 + breakKickRef.current * 0.08
     if (ringRef.current) {
       ringRef.current.rotation.z = clock.elapsedTime * 0.12
       ringRef.current.scale.setScalar(1 + Math.sin(clock.elapsedTime * 2.2) * 0.025)
     }
-    const eyeIntensity = 1.8 + Math.sin(clock.elapsedTime * 6.2) * 0.45
+    const eyeIntensity = 1.8 + Math.sin(clock.elapsedTime * 6.2) * 0.45 + breakKickRef.current * 2.4
     if (leftEyeRef.current) leftEyeRef.current.material.emissiveIntensity = eyeIntensity
     if (rightEyeRef.current) rightEyeRef.current.material.emissiveIntensity = eyeIntensity
   })
@@ -157,6 +168,28 @@ function BossAura({ runRef }) {
 }
 
 export default function BossEncounter({ snapshot, runRef }) {
+  const audio = useGameAudio()
+  const previousPhaseRef = useRef(snapshot.phase)
+  const previousBreaksRef = useRef(snapshot.bossTentaclesDestroyed ?? 0)
+
+  useEffect(() => {
+    const previousPhase = previousPhaseRef.current
+    const currentBreaks = snapshot.bossTentaclesDestroyed ?? 0
+
+    if (snapshot.phase === 'boss' && previousPhase !== 'boss') {
+      audio.playBossArrival()
+    }
+    if (currentBreaks > previousBreaksRef.current) {
+      audio.playTentacleBreak()
+    }
+    if (snapshot.phase === 'victory' && previousPhase !== 'victory') {
+      audio.playBossVictory()
+    }
+
+    previousPhaseRef.current = snapshot.phase
+    previousBreaksRef.current = currentBreaks
+  }, [audio, snapshot.bossTentaclesDestroyed, snapshot.phase])
+
   const boss = snapshot.boss
   if (!boss) return null
 
