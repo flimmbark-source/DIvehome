@@ -39,34 +39,54 @@
 
 .gun-callout {
   position: absolute;
-  top: 20%;
   width: min(310px, 31vw);
-  min-height: 260px;
-  padding: 14px;
+  min-height: 214px;
+  padding: 13px;
   border: 2px solid rgba(232, 238, 233, 0.78);
   background: rgba(7, 11, 11, 0.92);
   box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.24);
+  transition: box-shadow 120ms ease, transform 120ms ease;
 }
 
-.tooling-callout { left: 4vw; border-color: var(--shape-color); }
-.muzzle-callout { right: 4vw; border-color: var(--mode-color); }
+.body-callout {
+  top: 15%;
+  left: 3vw;
+  border-color: var(--shape-color);
+}
+
+.clip-callout {
+  top: 55%;
+  left: 3vw;
+  border-color: var(--shape-color);
+}
+
+.muzzle-callout {
+  top: 27%;
+  right: 3vw;
+  border-color: var(--mode-color);
+}
+
+.gun-callout.is-active {
+  transform: translateY(-3px);
+  box-shadow: 0 0 0 2px rgba(238, 245, 240, 0.9), 10px 10px 0 rgba(0, 0, 0, 0.3);
+}
 
 .gun-callout > span,
 .gun-callout > strong,
 .gun-callout > small { display: block; }
 .gun-callout > span { color: #7f8b85; font-size: 9px; }
 .gun-callout > strong { margin-top: 5px; font-size: 18px; }
-.gun-callout > small { min-height: 42px; margin-top: 7px; color: #c4cec9; font-size: 9px; line-height: 1.45; }
+.gun-callout > small { min-height: 32px; margin-top: 7px; color: #c4cec9; font-size: 9px; line-height: 1.45; }
 
 .gun-option-cycle {
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr) 38px;
   align-items: stretch;
   gap: 7px;
-  margin-top: 13px;
+  margin-top: 10px;
 }
 
-.gun-option-cycle button { min-height: 88px; font-size: 28px; }
+.gun-option-cycle button { min-height: 72px; font-size: 28px; }
 .gun-option-cycle button:hover,
 .gun-option-cycle button:focus-visible,
 .gun-load-button:hover,
@@ -96,8 +116,8 @@
 
 .gun-load-button {
   width: 100%;
-  margin-top: 9px;
-  padding: 9px 8px;
+  margin-top: 8px;
+  padding: 8px;
   font-size: 9px;
 }
 .gun-load-button:disabled { opacity: 0.42; cursor: not-allowed; }
@@ -131,6 +151,14 @@
   white-space: nowrap;
 }
 
+@media (max-height: 760px) and (min-width: 761px) {
+  .gun-callout { min-height: 190px; }
+  .body-callout { top: 13%; }
+  .clip-callout { top: 54%; }
+  .gun-option-cycle button { min-height: 58px; }
+  .gun-callout > small { min-height: 24px; }
+}
+
 @media (max-width: 760px) {
   .gun-customizer { overflow: auto; padding: 78px 12px 70px; }
   .gun-customizer-heading { top: 12px; width: calc(100% - 24px); }
@@ -142,6 +170,11 @@
     width: 100%;
     min-height: 0;
     margin-bottom: 12px;
+    transform: none;
+  }
+  .gun-callout.is-active {
+    transform: none;
+    box-shadow: 0 0 0 2px rgba(238, 245, 240, 0.9), 8px 8px 0 rgba(0, 0, 0, 0.24);
   }
   .gun-callout-lines { display: none; }
   .gun-customizer-help { bottom: 10px; max-width: calc(100% - 20px); white-space: normal; text-align: center; }
