@@ -12,6 +12,10 @@ function initialShape(progression, furnitureId) {
   return SHAPE_KEYS.find((shape) => (progression.inventory?.[shape] ?? 0) > 0) ?? SHAPE_KEYS[0]
 }
 
+function recaptureMouse() {
+  document.getElementById('root')?.requestPointerLock?.()
+}
+
 export default function FurnitureFuelSelector({
   furnitureId,
   progression,
@@ -39,12 +43,14 @@ export default function FurnitureFuelSelector({
   const confirm = useCallback(() => {
     if (!canLoad) return
     if (!isLoaded) onFuel(furnitureId, selectedShape)
+    recaptureMouse()
     onClose()
   }, [canLoad, furnitureId, isLoaded, onClose, onFuel, selectedShape])
 
   const unload = useCallback(() => {
     if (!loadedShape) return
     onClearFuel(furnitureId)
+    recaptureMouse()
     onClose()
   }, [furnitureId, loadedShape, onClearFuel, onClose])
 
