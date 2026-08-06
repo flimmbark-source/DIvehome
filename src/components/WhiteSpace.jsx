@@ -16,6 +16,10 @@ const WORKBENCH_POSITION = new THREE.Vector3(-3.65, 0, -1.65)
 const PLAYER_HEIGHT = 1.62
 const PLAYER_SPEED = 3.1
 
+function ensurePointerLock() {
+  if (!document.pointerLockElement) document.getElementById('root')?.requestPointerLock?.()
+}
+
 function PlayerRig({
   mechanismUnlocked,
   built,
@@ -58,8 +62,11 @@ function PlayerRig({
 
   useEffect(() => {
     const onKeyDown = (event) => {
-      if (['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(event.code)) event.preventDefault()
-      if (controlsEnabled) keysRef.current.add(event.code)
+      const movementKey = ['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(event.code)
+      if (movementKey) event.preventDefault()
+      if (!controlsEnabled) return
+      if (movementKey && !document.pointerLockElement) ensurePointerLock()
+      keysRef.current.add(event.code)
     }
     const onKeyUp = (event) => keysRef.current.delete(event.code)
     const clearKeys = () => keysRef.current.clear()
@@ -77,7 +84,7 @@ function PlayerRig({
     const requestLock = (event) => {
       if (event.button !== 0 || document.pointerLockElement || !controlsEnabled) return
       onUnlockAudio()
-      document.getElementById('root')?.requestPointerLock?.()
+      ensurePointerLock()
     }
 
     window.addEventListener('keydown', onKeyDown)
@@ -226,7 +233,8 @@ function Apparatus({ active, gunActive, progression, inspectingGun }) {
           <group position={[0, 0, 0.14]} scale={0.62}>
             <WeaponMesh
               fireMode={progression.weapon?.fireMode}
-              loadedShape={progression.fuel?.workbench}
+              bodyShape={progression.fuel?.toaster}
+              clipShape={progression.fuel?.workbench}
             />
           </group>
         )}
@@ -235,7 +243,7 @@ function Apparatus({ active, gunActive, progression, inspectingGun }) {
   )
 }
 
-function GunInspectionRig({ fireMode, loadedShape }) {
+function GunInspectionRig({ fireMode, bodyShape, clipShape }) {
   const groupRef = useRef()
   const progressRef = useRef(0)
   const { camera } = useThree()
@@ -276,7 +284,8 @@ function GunInspectionRig({ fireMode, loadedShape }) {
       <WeaponMesh
         depthTest={false}
         fireMode={fireMode}
-        loadedShape={loadedShape}
+        bodyShape={bodyShape}
+        clipShape={clipShape}
       />
     </group>
   )
@@ -420,7 +429,8 @@ function WhiteRoom({ focusId, activeInterface, progression }) {
       {inspectingGun && (
         <GunInspectionRig
           fireMode={progression.weapon?.fireMode}
-          loadedShape={progression.fuel?.workbench}
+          bodyShape={progression.fuel?.toaster}
+          clipShape={progression.fuel?.workbench}
         />
       )}
     </>
@@ -430,6 +440,7 @@ function WhiteRoom({ focusId, activeInterface, progression }) {
 export default function WhiteSpace({
   progression,
   roomPoseRef,
+  externalInterfaceOpen = false,
   onUseApparatus,
   onCraft,
   onFuel,
@@ -440,7 +451,7 @@ export default function WhiteSpace({
   const [pointerLocked, setPointerLocked] = useState(Boolean(document.pointerLockElement))
   const [activeInterface, setActiveInterface] = useState(null)
   const audio = useGameAudio()
-  const interfaceOpen = Boolean(activeInterface)
+  const interfaceOpen = Boolean(activeInterface) || externalInterfaceOpen
 
   useEffect(() => {
     const update = () => setPointerLocked(Boolean(document.pointerLockElement))
@@ -450,20 +461,16 @@ export default function WhiteSpace({
 
   const useApparatus = useCallback(() => {
     audio.playEnter()
-    document.exitPointerLock?.()
     onUseApparatus()
   }, [audio, onUseApparatus])
 
   const openInterface = useCallback((interfaceId) => {
-    document.exitPointerLock?.()
     setActiveInterface(interfaceId)
   }, [])
 
   const closeInterface = useCallback(() => {
     setActiveInterface(null)
-    window.requestAnimationFrame(() => {
-      document.getElementById('root')?.requestPointerLock?.()
-    })
+    ensurePointerLock()
   }, [])
 
   const useFocused = useCallback(() => {
@@ -477,14 +484,14 @@ export default function WhiteSpace({
   useEffect(() => {
     const onKeyDown = (event) => {
       if (event.code === 'KeyE' && !interfaceOpen) useFocused()
-      if (event.code === 'Escape' && interfaceOpen) {
+      if (event.code === 'Backspace' && activeInterface) {
         event.preventDefault()
         closeInterface()
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [closeInterface, interfaceOpen, useFocused])
+  }, [activeInterface, closeInterface, interfaceOpen, useFocused])
 
   const prompt = useMemo(() => {
     if (focusId === 'apparatus') return { title: 'THE APPARATUS', action: 'PRESS E TO ENTER' }
@@ -531,7 +538,7 @@ export default function WhiteSpace({
         ))}
       </div>
       {!interfaceOpen && <div className="room-crosshair" aria-hidden="true">+</div>}
-      {!pointerLocked && !interfaceOpen && <div className="room-help">CLICK TO CAPTURE MOUSE · WASD TO MOVE</div>}
+      {!pointerLocked && !interfaceOpen && <div className="room-help">CLICK OR MOVE TO RECAPTURE MOUSE · WASD TO MOVE</div>}
       {prompt && !interfaceOpen && (
         <button className="apparatus-prompt" type="button" onClick={useFocused}>
           <strong>{prompt.title}</strong>
