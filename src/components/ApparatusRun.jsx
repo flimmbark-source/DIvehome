@@ -3,9 +3,17 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import useGameAudio from '../audio/useGameAudio.js'
 import { APPARATUS_CONFIG, tunnelAxisAt } from '../game/config.js'
+import { activeTentacleCount, bossRegenerationLabel } from '../game/boss.js'
 import { SHAPE_KEYS, SHAPE_META } from '../game/progression.js'
-import { advanceRun, createRun, shapePayout, shootEnemy } from '../game/simulation.js'
+import {
+  advanceRun,
+  createRun,
+  isCombatPhase,
+  shapePayout,
+  shootTarget,
+} from '../game/simulation.js'
 import { enemyWorldPosition } from '../game/world.js'
+import BossEncounter from './BossEncounter.jsx'
 import ProjectileLayer from './ProjectileLayer.jsx'
 
 const ENEMY_COLORS = Object.freeze(
@@ -179,8 +187,6 @@ function GunModel({ shotPulse, aimRef, reloading }) {
       .add(camera.position)
     group.position.lerp(transforms.targetPosition, 1 - Math.exp(-delta * 28))
 
-    // Aim at the far end of the pointer ray. Mid-depth NDC points can sit
-    // behind the muzzle and make the weapon rotate back toward the player.
     transforms.targetPoint.set(smoothedAim.x, smoothedAim.y, FAR_AIM_DEPTH).unproject(camera)
     transforms.direction.copy(transforms.targetPoint).sub(group.position).normalize()
     transforms.aimQuaternion.setFromUnitVectors(FORWARD, transforms.direction)
@@ -257,7 +263,7 @@ function RunStepper({ runRef, onSnapshot }) {
   useFrame((_, delta) => {
     runRef.current = advanceRun(runRef.current, delta)
     frameRef.current += 1
-    if (frameRef.current % 4 === 0 || runRef.current.phase === 'overwhelmed') {
+    if (frameRef.current % 4 === 0 || !isCombatPhase(runRef.current)) {
       onSnapshot(runRef.current)
     }
   })
@@ -277,6 +283,7 @@ function ApparatusScene({ runRef, snapshot, onSnapshot, onProjectileHit, shotReq
       {snapshot.enemies.map((enemy) => (
         <Enemy key={enemy.id} enemyId={enemy.id} runRef={runRef} />
       ))}
+      <BossEncounter snapshot={snapshot} runRef={runRef} />
       <ProjectileLayer
         shotRequest={shotRequest}
         runRef={runRef}
@@ -285,6 +292,19 @@ function ApparatusScene({ runRef, snapshot, onSnapshot, onProjectileHit, shotReq
       />
       <GunModel shotPulse={shotPulse} aimRef={aimRef} reloading={reloading} />
     </>
+  )
+}
+
+function ShapeReward({ payout }) {
+  return (
+    <div className="shape-payout">
+      {SHAPE_KEYS.map((shape) => (
+        <div key={shape} style={{ '--shape-color': SHAPE_META[shape].color }}>
+          <strong>{SHAPE_META[shape].symbol} {payout[shape]}</strong>
+          <small>{SHAPE_META[shape].label}</small>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -314,7 +334,7 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
   const reloadDuration = APPARATUS_CONFIG.RELOAD_SECONDS * (loadout.reloadMultiplier ?? 1)
 
   const beginReload = useCallback(() => {
-    if (runRef.current.phase !== 'running' || reloadingRef.current || loadedRef.current) return
+    if (!isCombatPhase(runRef.current) || reloadingRef.current || loadedRef.current) return
     reloadingRef.current = true
     setReloading(true)
     setReloadCycle((value) => value + 1)
@@ -324,7 +344,7 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
       reloadingRef.current = false
       setReloading(false)
       reloadTimerRef.current = null
-      if (runRef.current.phase !== 'running') return
+      if (!isCombatPhase(runRef.current)) return
       loadedRef.current = true
       setLoaded(true)
       audio.playReloadComplete()
@@ -332,7 +352,7 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
   }, [audio, reloadDuration])
 
   const fire = useCallback(() => {
-    if (runRef.current.phase !== 'running') return
+    if (!isCombatPhase(runRef.current)) return
     if (!loadedRef.current || reloadingRef.current) {
       const now = performance.now()
       if (now - lastDryAtRef.current > 140) {
@@ -354,8 +374,8 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
   }, [audio, beginReload])
 
   const onProjectileHit = useCallback(
-    (enemyId, _pattern, screenPosition) => {
-      const next = shootEnemy(runRef.current, enemyId)
+    (target, screenPosition) => {
+      const next = shootTarget(runRef.current, target.id)
       if (next === runRef.current) return
       runRef.current = next
       setSnapshot(next)
@@ -391,6 +411,9 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
   )
 
   const payout = shapePayout(snapshot)
+  const bossTentacles = activeTentacleCount(snapshot.boss)
+  const bossRegen = bossRegenerationLabel(snapshot.boss)
+  const roundSeconds = Math.max(0, Math.ceil(APPARATUS_CONFIG.ROUND_SECONDS - snapshot.elapsed))
 
   const returnToRoom = () => {
     document.getElementById('root')?.requestPointerLock?.()
@@ -435,7 +458,7 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
         />
       </Canvas>
 
-      {snapshot.phase === 'running' && (
+      {isCombatPhase(snapshot) && (
         <div
           className="fire-capture"
           onPointerDown={(event) => {
@@ -454,15 +477,37 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
           <span>SHIELD</span>
           <strong>{snapshot.shield > 0 ? '◆'.repeat(snapshot.shield) : '—'}</strong>
         </div>
-        <div>
-          <span>DEPTH</span>
-          <strong>{Math.floor(snapshot.travelDistance).toString().padStart(4, '0')}</strong>
-        </div>
-        <div>
-          <span>COLLECTED</span>
-          <strong>{String(snapshot.kills).padStart(3, '0')}</strong>
-        </div>
+        {snapshot.phase === 'running' ? (
+          <>
+            <div>
+              <span>ROUND</span>
+              <strong>{String(roundSeconds).padStart(2, '0')} SEC</strong>
+            </div>
+            <div>
+              <span>COLLECTED</span>
+              <strong>{String(snapshot.kills).padStart(3, '0')}</strong>
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <span>TENTACLES</span>
+              <strong>{bossTentacles} / {APPARATUS_CONFIG.BOSS_TENTACLE_COUNT}</strong>
+            </div>
+            <div className={`boss-regen-status regen-${bossRegen.toLowerCase()}`}>
+              <span>REGENERATION</span>
+              <strong>{bossRegen}</strong>
+            </div>
+          </>
+        )}
       </div>
+
+      {snapshot.phase === 'boss' && snapshot.boss?.elapsed < APPARATUS_CONFIG.BOSS_INTRO_SECONDS && (
+        <div className="boss-arrival" aria-hidden="true">
+          <span>END OF ROUND</span>
+          <strong>STRUCTURE FORMING</strong>
+        </div>
+      )}
 
       {loadout.effects?.length > 0 && (
         <div className="active-loadout">
@@ -524,14 +569,19 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
         <section className="overwhelm-panel">
           <span>CAPACITY EXCEEDED</span>
           <h1>OVERWHELMED</h1>
-          <div className="shape-payout">
-            {SHAPE_KEYS.map((shape) => (
-              <div key={shape} style={{ '--shape-color': SHAPE_META[shape].color }}>
-                <strong>{SHAPE_META[shape].symbol} {payout[shape]}</strong>
-                <small>{SHAPE_META[shape].label}</small>
-              </div>
-            ))}
-          </div>
+          <ShapeReward payout={payout} />
+          <button type="button" onClick={returnToRoom}>
+            RETURN TO WHITE SPACE
+          </button>
+        </section>
+      )}
+
+      {snapshot.phase === 'victory' && (
+        <section className="overwhelm-panel victory-panel">
+          <span>REGENERATION TERMINATED</span>
+          <h1>STRUCTURE DISMANTLED</h1>
+          <p>BOSS CACHE RECOVERED</p>
+          <ShapeReward payout={payout} />
           <button type="button" onClick={returnToRoom}>
             RETURN TO WHITE SPACE
           </button>
