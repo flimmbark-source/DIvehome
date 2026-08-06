@@ -7,7 +7,7 @@ const APPARATUS_POSITION = new THREE.Vector3(0, 0, -4.4)
 const PLAYER_HEIGHT = 1.62
 const PLAYER_SPEED = 3.1
 
-function PlayerRig({ onNearChange, onStep }) {
+function PlayerRig({ onNearChange, onStep, onUnlockAudio }) {
   const { camera, gl } = useThree()
   const keysRef = useRef(new Set())
   const yawRef = useRef(0)
@@ -41,6 +41,7 @@ function PlayerRig({ onNearChange, onStep }) {
     }
     const requestLock = (event) => {
       if (event.button !== 0 || document.pointerLockElement === gl.domElement) return
+      onUnlockAudio()
       gl.domElement.requestPointerLock?.()
     }
 
@@ -57,7 +58,7 @@ function PlayerRig({ onNearChange, onStep }) {
       window.removeEventListener('mousemove', onMouseMove)
       gl.domElement.removeEventListener('pointerdown', requestLock)
     }
-  }, [camera, gl])
+  }, [camera, gl, onUnlockAudio])
 
   useFrame((_, rawDelta) => {
     const delta = Math.min(rawDelta, 0.05)
@@ -231,7 +232,7 @@ export default function WhiteSpace({ currency, onUseApparatus }) {
           gl.toneMapping = THREE.NoToneMapping
         }}
       >
-        <PlayerRig onNearChange={setNear} onStep={audio.playStep} />
+        <PlayerRig onNearChange={setNear} onStep={audio.playStep} onUnlockAudio={audio.unlock} />
         <WhiteRoom near={near} onUse={useApparatus} />
       </Canvas>
 
