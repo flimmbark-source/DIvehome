@@ -24,7 +24,8 @@ export function createRun(seed = Date.now(), config = APPARATUS_CONFIG, loadout 
     phase: 'running',
     elapsed: 0,
     travelDistance: 0,
-    nextSpawnAt: 0.65,
+    nextSpawnAt: config.FIRST_WAVE_AT ?? 0.65,
+    wavesSpawned: 0,
     nextId: 1,
     hp: maxHp,
     maxHp,
@@ -42,18 +43,27 @@ export function createRun(seed = Date.now(), config = APPARATUS_CONFIG, loadout 
   }
 }
 
-function spawnIntervalAt(elapsed, config) {
+export function spawnIntervalAt(elapsed, config = APPARATUS_CONFIG) {
   return Math.max(
-    config.MIN_SPAWN_INTERVAL,
-    config.INITIAL_SPAWN_INTERVAL - elapsed * config.SPAWN_RAMP_PER_SECOND,
+    config.MIN_WAVE_INTERVAL,
+    config.INITIAL_WAVE_INTERVAL - elapsed * config.WAVE_INTERVAL_RAMP_PER_SECOND,
   )
 }
 
-function createEnemy(state, config) {
+export function waveSizeAt(elapsed, config = APPARATUS_CONFIG) {
+  if (elapsed < config.OPENING_WAVE_SECONDS) return 1
+  const rampSeconds = Math.max(0.01, config.WAVE_SIZE_RAMP_SECONDS)
+  const escalation = Math.floor((elapsed - config.OPENING_WAVE_SECONDS) / rampSeconds)
+  return Math.min(config.MAX_WAVE_SIZE, 2 + escalation)
+}
+
+function createEnemy(state, config, memberIndex = 0, waveSize = 1) {
   const random = mulberry32(state.seed + state.nextId * 7919)
   const pattern = ENEMY_PATTERNS[Math.floor(random() * ENEMY_PATTERNS.length)]
-  const angle = random() * Math.PI * 2
-  const radius = (0.18 + random() * 0.82) * config.MAX_OFFSET
+  const angle = waveSize > 1
+    ? state.wavesSpawned * 1.73 + (memberIndex / waveSize) * Math.PI * 2 + (random() - 0.5) * 0.35
+    : random() * Math.PI * 2
+  const radius = (waveSize > 1 ? 0.38 + random() * 0.62 : 0.18 + random() * 0.82) * config.MAX_OFFSET
   const offset = {
     x: Math.cos(angle) * radius,
     y: Math.sin(angle) * radius,
@@ -61,8 +71,15 @@ function createEnemy(state, config) {
 
   return {
     id: `enemy-${state.nextId}`,
+    waveId: state.wavesSpawned,
+    waveMember: memberIndex,
+    waveSize,
     pattern,
-    routeZ: state.travelDistance + config.SPAWN_DISTANCE + random() * 8,
+    routeZ:
+      state.travelDistance +
+      config.SPAWN_DISTANCE +
+      memberIndex * config.WAVE_DEPTH_SPACING +
+      random() * config.WAVE_DEPTH_JITTER,
     offset,
     phase: random() * Math.PI * 2,
     state: 'approaching',
@@ -137,16 +154,24 @@ function advanceOrdinaryRun(state, delta, config) {
   }
 
   let nextSpawnAt = state.nextSpawnAt
+  let wavesSpawned = state.wavesSpawned ?? 0
   let nextId = state.nextId
   let seed = state.seed
   let enemies = [...state.enemies]
 
   while (elapsed >= nextSpawnAt && nextSpawnAt < config.ROUND_SECONDS) {
-    const spawnState = { ...state, travelDistance, nextId, seed }
-    enemies.push(createEnemy(spawnState, config))
-    nextId += 1
-    seed = (seed + 0x9e3779b9) >>> 0
-    nextSpawnAt += spawnIntervalAt(elapsed, config)
+    const waveElapsed = nextSpawnAt
+    const waveSize = waveSizeAt(waveElapsed, config)
+
+    for (let memberIndex = 0; memberIndex < waveSize; memberIndex += 1) {
+      const spawnState = { ...state, travelDistance, nextId, seed, wavesSpawned }
+      enemies.push(createEnemy(spawnState, config, memberIndex, waveSize))
+      nextId += 1
+      seed = (seed + 0x9e3779b9) >>> 0
+    }
+
+    wavesSpawned += 1
+    nextSpawnAt += spawnIntervalAt(waveElapsed, config)
   }
 
   let hp = state.hp
@@ -185,6 +210,7 @@ function advanceOrdinaryRun(state, delta, config) {
     elapsed,
     travelDistance,
     nextSpawnAt,
+    wavesSpawned,
     nextId,
     seed,
     hp: Math.max(0, hp),
