@@ -24,6 +24,25 @@ export const FURNITURE_RECIPES = Object.freeze({
   }),
 })
 
+export const FURNITURE_FUEL_EFFECTS = Object.freeze({
+  toaster: Object.freeze({
+    drift: '+2 INTEGRITY',
+    zigzag: 'FASTER RELOAD',
+    orbit: 'BLOCK FIRST HIT',
+    corkscrew: '+1 INTEGRITY, QUICKER RELOAD',
+  }),
+  workbench: Object.freeze({
+    drift: 'LARGER PROJECTILE',
+    zigzag: 'FASTER PROJECTILE',
+    orbit: 'GUIDED PROJECTILE',
+    corkscrew: 'PIERCE ONE TARGET',
+  }),
+})
+
+export function furnitureFuelEffect(furnitureId, shapeKey) {
+  return FURNITURE_FUEL_EFFECTS[furnitureId]?.[shapeKey] ?? ''
+}
+
 export function emptyShapeInventory() {
   return Object.fromEntries(SHAPE_KEYS.map((key) => [key, 0]))
 }
@@ -110,51 +129,50 @@ function baseLoadout() {
   }
 }
 
+function loadoutEffectLabel(furnitureId, shape) {
+  const furnitureLabel = furnitureId === 'toaster' ? 'TOAST' : 'TOOLING'
+  return `${SHAPE_META[shape].label} ${furnitureLabel}: ${furnitureFuelEffect(furnitureId, shape)}`
+}
+
 function applyToaster(loadout, shape) {
   switch (shape) {
     case 'drift':
       loadout.maxHpBonus += 2
-      loadout.effects.push('ICOSA TOAST: +2 INTEGRITY')
       break
     case 'zigzag':
       loadout.reloadMultiplier *= 0.72
-      loadout.effects.push('CONE TOAST: FASTER RELOAD')
       break
     case 'orbit':
       loadout.startingShield += 1
-      loadout.effects.push('TETRA TOAST: BLOCK FIRST HIT')
       break
     case 'corkscrew':
       loadout.maxHpBonus += 1
       loadout.reloadMultiplier *= 0.88
-      loadout.effects.push('OCTA TOAST: +1 INTEGRITY, QUICKER RELOAD')
       break
     default:
-      break
+      return
   }
+  loadout.effects.push(loadoutEffectLabel('toaster', shape))
 }
 
 function applyWorkbench(loadout, shape) {
   switch (shape) {
     case 'drift':
       loadout.projectileRadiusMultiplier *= 1.65
-      loadout.effects.push('ICOSA TOOLING: LARGER PROJECTILE')
       break
     case 'zigzag':
       loadout.projectileSpeedMultiplier *= 1.5
-      loadout.effects.push('CONE TOOLING: FASTER PROJECTILE')
       break
     case 'orbit':
       loadout.homingStrength += 3.6
-      loadout.effects.push('TETRA TOOLING: GUIDED PROJECTILE')
       break
     case 'corkscrew':
       loadout.projectilePierceBonus += 1
-      loadout.effects.push('OCTA TOOLING: PIERCE ONE TARGET')
       break
     default:
-      break
+      return
   }
+  loadout.effects.push(loadoutEffectLabel('workbench', shape))
 }
 
 export function prepareRunFromFurniture(progression) {
