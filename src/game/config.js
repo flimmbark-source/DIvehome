@@ -16,6 +16,10 @@ export const APPARATUS_CONFIG = Object.freeze({
   UNDULATION_FREQ: 0.05,
   TWIST_PER_UNIT: 0.017,
   RELOAD_SECONDS: 0.78,
+  PROJECTILE_SPEED: 42,
+  PROJECTILE_RADIUS: 0.18,
+  PROJECTILE_MAX_AGE: 2.2,
+  ENEMY_HIT_RADIUS: 0.86,
 })
 
 export const ENEMY_PATTERNS = Object.freeze(['drift', 'zigzag', 'orbit', 'corkscrew'])
