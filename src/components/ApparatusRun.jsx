@@ -12,9 +12,11 @@ import {
   shapePayout,
   shootTarget,
 } from '../game/simulation.js'
+import { fireModeFor, normalizeFireMode, roundsPerTrigger } from '../game/weapon.js'
 import { enemyWorldPosition } from '../game/world.js'
 import BossEncounter from './BossEncounter.jsx'
 import ProjectileLayer from './ProjectileLayer.jsx'
+import WeaponMesh from './WeaponMesh.jsx'
 
 const ENEMY_COLORS = Object.freeze(
   Object.fromEntries(SHAPE_KEYS.map((key) => [key, SHAPE_META[key].color])),
@@ -22,6 +24,7 @@ const ENEMY_COLORS = Object.freeze(
 const FORWARD = new THREE.Vector3(0, 0, -1)
 const RIGHT = new THREE.Vector3(1, 0, 0)
 const FAR_AIM_DEPTH = 1
+const PROJECTILE_BURST_GAP_MS = 92
 
 function Tunnel({ runRef }) {
   const ringsRef = useRef([])
@@ -133,7 +136,7 @@ function CameraFall({ runRef }) {
   return null
 }
 
-function GunModel({ shotPulse, aimRef, reloading }) {
+function GunModel({ shotPulse, aimRef, reloading, fireMode, loadedShape }) {
   const groupRef = useRef()
   const flashRef = useRef()
   const { camera } = useThree()
@@ -211,49 +214,12 @@ function GunModel({ shotPulse, aimRef, reloading }) {
 
   return (
     <group ref={groupRef} renderOrder={30}>
-      <mesh>
-        <boxGeometry args={[0.34, 0.4, 1.18]} />
-        <meshBasicMaterial color="#151719" depthTest={false} toneMapped={false} />
-      </mesh>
-      <mesh position={[0, 0.015, -0.01]}>
-        <boxGeometry args={[0.28, 0.34, 1.12]} />
-        <meshStandardMaterial
-          color="#d7ccb1"
-          emissive="#453b2b"
-          emissiveIntensity={0.55}
-          depthTest={false}
-          toneMapped={false}
-          flatShading
-        />
-      </mesh>
-      <mesh position={[0, -0.24, 0.2]} rotation={[0.28, 0, 0]}>
-        <boxGeometry args={[0.24, 0.58, 0.3]} />
-        <meshStandardMaterial color="#3a2922" emissive="#170c08" emissiveIntensity={0.35} depthTest={false} flatShading />
-      </mesh>
-      <mesh position={[0, 0.02, -0.73]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.078, 0.1, 0.68, 6]} />
-        <meshBasicMaterial color="#080a0b" depthTest={false} toneMapped={false} />
-      </mesh>
-      <mesh position={[0, 0.2, -0.28]}>
-        <boxGeometry args={[0.055, 0.1, 0.18]} />
-        <meshBasicMaterial color="#7bffe0" depthTest={false} toneMapped={false} />
-      </mesh>
-      <mesh position={[0.145, 0.025, 0.03]}>
-        <boxGeometry args={[0.035, 0.24, 0.72]} />
-        <meshBasicMaterial color="#e8793f" depthTest={false} toneMapped={false} />
-      </mesh>
-      <pointLight position={[0.16, 0.12, -0.45]} color="#ffd18b" intensity={0.75} distance={2.2} />
-      <group ref={flashRef} position={[0, 0.02, -1.12]} visible={false}>
-        <mesh rotation={[-Math.PI / 2, 0, 0]}>
-          <coneGeometry args={[0.25, 0.72, 5]} />
-          <meshBasicMaterial color="#fff2a8" transparent opacity={0.92} depthWrite={false} depthTest={false} toneMapped={false} />
-        </mesh>
-        <mesh rotation={[-Math.PI / 2, 0, Math.PI / 5]}>
-          <coneGeometry args={[0.14, 0.52, 4]} />
-          <meshBasicMaterial color="#ff8a3d" transparent opacity={0.88} depthWrite={false} depthTest={false} toneMapped={false} />
-        </mesh>
-        <pointLight color="#ffd180" intensity={7} distance={4.5} decay={2} />
-      </group>
+      <WeaponMesh
+        depthTest={false}
+        fireMode={fireMode}
+        loadedShape={loadedShape}
+        flashRef={flashRef}
+      />
     </group>
   )
 }
@@ -290,7 +256,13 @@ function ApparatusScene({ runRef, snapshot, onSnapshot, onProjectileHit, shotReq
         loadout={loadout}
         onHit={onProjectileHit}
       />
-      <GunModel shotPulse={shotPulse} aimRef={aimRef} reloading={reloading} />
+      <GunModel
+        shotPulse={shotPulse}
+        aimRef={aimRef}
+        reloading={reloading}
+        fireMode={loadout.fireMode}
+        loadedShape={loadout.toolingShape}
+      />
     </>
   )
 }
@@ -321,6 +293,8 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
   const reloadingRef = useRef(false)
   const reticleRef = useRef(null)
   const reloadTimerRef = useRef(null)
+  const burstTimersRef = useRef([])
+  const shotIdRef = useRef(1)
   const lastDryAtRef = useRef(0)
   const lastHitsRef = useRef(0)
   const lastPhaseRef = useRef('running')
@@ -332,6 +306,8 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
   })
   const audio = useGameAudio()
   const reloadDuration = APPARATUS_CONFIG.RELOAD_SECONDS * (loadout.reloadMultiplier ?? 1)
+  const fireMode = normalizeFireMode(loadout.fireMode)
+  const fireModeMeta = fireModeFor(fireMode)
 
   const beginReload = useCallback(() => {
     if (!isCombatPhase(runRef.current) || reloadingRef.current || loadedRef.current) return
@@ -351,6 +327,19 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
     }, reloadDuration * 1000)
   }, [audio, reloadDuration])
 
+  const emitRound = useCallback(() => {
+    if (!isCombatPhase(runRef.current)) return
+    const id = shotIdRef.current
+    shotIdRef.current += 1
+    setShotPulse((value) => value + 1)
+    setShotRequest({
+      id,
+      mode: fireMode,
+      aim: { x: aimRef.current.x, y: aimRef.current.y },
+    })
+    audio.playShot()
+  }, [audio, fireMode])
+
   const fire = useCallback(() => {
     if (!isCombatPhase(runRef.current)) return
     if (!loadedRef.current || reloadingRef.current) {
@@ -364,14 +353,21 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
 
     loadedRef.current = false
     setLoaded(false)
-    setShotPulse((value) => value + 1)
-    setShotRequest({
-      id: performance.now(),
-      aim: { x: aimRef.current.x, y: aimRef.current.y },
-    })
-    audio.playShot()
-    beginReload()
-  }, [audio, beginReload])
+
+    const roundCount = roundsPerTrigger(fireMode)
+    if (roundCount === 1) {
+      emitRound()
+      beginReload()
+      return
+    }
+
+    burstTimersRef.current = Array.from({ length: roundCount }, (_, index) =>
+      window.setTimeout(() => {
+        emitRound()
+        if (index === roundCount - 1) beginReload()
+      }, index * PROJECTILE_BURST_GAP_MS),
+    )
+  }, [audio, beginReload, emitRound, fireMode])
 
   const onProjectileHit = useCallback(
     (target, screenPosition) => {
@@ -406,6 +402,7 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
   useEffect(
     () => () => {
       if (reloadTimerRef.current) window.clearTimeout(reloadTimerRef.current)
+      for (const timer of burstTimersRef.current) window.clearTimeout(timer)
     },
     [],
   )
@@ -517,7 +514,7 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
 
       <div className={`weapon-status ${loaded ? 'is-loaded' : ''} ${reloading ? 'is-reloading' : ''}`}>
         <div className="weapon-status-line">
-          <span>WEAPON</span>
+          <span>{fireModeMeta.label} ×{fireModeMeta.roundsPerTrigger}</span>
           <strong>{reloading ? 'CYCLING' : loaded ? 'READY' : 'EMPTY'}</strong>
         </div>
         <div className="reload-track" aria-hidden="true">
