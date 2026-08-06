@@ -1,4 +1,5 @@
 import { APPARATUS_CONFIG, ENEMY_PATTERNS } from './config.js'
+import { advanceBoss, createBoss, destroyBossTarget } from './boss.js'
 import { emptyShapeInventory } from './progression.js'
 
 function mulberry32(seed) {
@@ -10,6 +11,11 @@ function mulberry32(seed) {
     result ^= result + Math.imul(result ^ (result >>> 7), result | 61)
     return ((result ^ (result >>> 14)) >>> 0) / 4294967296
   }
+}
+
+export function isCombatPhase(stateOrPhase) {
+  const phase = typeof stateOrPhase === 'string' ? stateOrPhase : stateOrPhase?.phase
+  return phase === 'running' || phase === 'boss'
 }
 
 export function createRun(seed = Date.now(), config = APPARATUS_CONFIG, loadout = {}) {
@@ -28,6 +34,10 @@ export function createRun(seed = Date.now(), config = APPARATUS_CONFIG, loadout 
     hitsTaken: 0,
     shapeDrops: emptyShapeInventory(),
     enemies: [],
+    boss: null,
+    bossPiecesDestroyed: 0,
+    bossTentaclesDestroyed: 0,
+    bossRewardGranted: false,
     seed: seed >>> 0,
   }
 }
@@ -92,18 +102,46 @@ export function patternOffset(enemy, distanceAhead, elapsed) {
   }
 }
 
-export function advanceRun(state, deltaSeconds, config = APPARATUS_CONFIG) {
-  if (state.phase !== 'running') return state
+function absorbHits(state, incomingHits) {
+  let hp = state.hp
+  let shield = state.shield ?? 0
+  let blocks = state.blocks ?? 0
+  let hitsTaken = state.hitsTaken
 
-  const delta = Math.max(0, Math.min(deltaSeconds, 0.05))
+  for (let index = 0; index < incomingHits; index += 1) {
+    if (shield > 0) {
+      shield -= 1
+      blocks += 1
+    } else {
+      hp -= 1
+      hitsTaken += 1
+    }
+  }
+
+  return { hp: Math.max(0, hp), shield, blocks, hitsTaken }
+}
+
+function advanceOrdinaryRun(state, delta, config) {
   const elapsed = state.elapsed + delta
   const travelDistance = state.travelDistance + config.TRAVEL_SPEED * delta
+
+  if (elapsed >= config.ROUND_SECONDS) {
+    return {
+      ...state,
+      phase: 'boss',
+      elapsed,
+      travelDistance,
+      enemies: [],
+      boss: createBoss(config),
+    }
+  }
+
   let nextSpawnAt = state.nextSpawnAt
   let nextId = state.nextId
   let seed = state.seed
   let enemies = [...state.enemies]
 
-  while (elapsed >= nextSpawnAt) {
+  while (elapsed >= nextSpawnAt && nextSpawnAt < config.ROUND_SECONDS) {
     const spawnState = { ...state, travelDistance, nextId, seed }
     enemies.push(createEnemy(spawnState, config))
     nextId += 1
@@ -157,8 +195,31 @@ export function advanceRun(state, deltaSeconds, config = APPARATUS_CONFIG) {
   }
 }
 
-export function shootEnemy(state, enemyId) {
-  if (state.phase !== 'running' || !enemyId) return state
+function advanceBossRun(state, delta, config) {
+  const advanced = advanceBoss(state.boss, delta, config)
+  const damage = absorbHits(state, advanced.attacks)
+  const defeated = Boolean(advanced.boss?.defeated)
+  const phase = damage.hp <= 0 ? 'overwhelmed' : defeated ? 'victory' : 'boss'
+
+  return {
+    ...state,
+    phase,
+    elapsed: state.elapsed + delta,
+    ...damage,
+    boss: advanced.boss,
+    bossRewardGranted: state.bossRewardGranted || defeated,
+  }
+}
+
+export function advanceRun(state, deltaSeconds, config = APPARATUS_CONFIG) {
+  if (!isCombatPhase(state)) return state
+
+  const delta = Math.max(0, Math.min(deltaSeconds, 0.05))
+  if (state.phase === 'boss') return advanceBossRun(state, delta, config)
+  return advanceOrdinaryRun(state, delta, config)
+}
+
+function shootOrdinaryEnemy(state, enemyId) {
   const enemy = state.enemies.find((candidate) => candidate.id === enemyId)
   if (!enemy) return state
   return {
@@ -172,6 +233,36 @@ export function shootEnemy(state, enemyId) {
   }
 }
 
-export function shapePayout(state) {
-  return { ...emptyShapeInventory(), ...state.shapeDrops }
+export function shootTarget(state, targetId) {
+  if (!isCombatPhase(state) || !targetId) return state
+
+  if (state.phase === 'running') return shootOrdinaryEnemy(state, targetId)
+
+  const result = destroyBossTarget(state.boss, targetId)
+  if (!result.changed) return state
+
+  return {
+    ...state,
+    phase: result.defeated ? 'victory' : 'boss',
+    boss: result.boss,
+    bossPiecesDestroyed: state.bossPiecesDestroyed + 1,
+    bossTentaclesDestroyed:
+      state.bossTentaclesDestroyed + (result.tentacleDestroyed ? 1 : 0),
+    bossRewardGranted: state.bossRewardGranted || result.defeated,
+  }
+}
+
+// Kept as a compatibility alias for the existing simulation tests and callers.
+export function shootEnemy(state, enemyId) {
+  return shootTarget(state, enemyId)
+}
+
+export function shapePayout(state, config = APPARATUS_CONFIG) {
+  const payout = { ...emptyShapeInventory(), ...state.shapeDrops }
+  if (!state.bossRewardGranted) return payout
+
+  for (const [shape, amount] of Object.entries(config.BOSS_REWARD)) {
+    payout[shape] = (payout[shape] ?? 0) + amount
+  }
+  return payout
 }
