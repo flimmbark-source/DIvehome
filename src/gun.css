@@ -1,0 +1,148 @@
+.gun-customizer {
+  position: absolute;
+  inset: 0;
+  z-index: 88;
+  color: #e9eee9;
+  background: rgba(5, 8, 8, 0.34);
+  outline: none;
+  pointer-events: auto;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.gun-customizer-heading {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 14px;
+  width: min(720px, calc(100% - 40px));
+  transform: translateX(-50%);
+  padding: 10px 12px;
+  border: 1px solid rgba(225, 234, 229, 0.56);
+  background: rgba(7, 11, 11, 0.9);
+}
+
+.gun-customizer-heading span { color: #84918b; font-size: 9px; }
+.gun-customizer-heading strong { text-align: center; font-size: 14px; }
+.gun-customizer-heading button,
+.gun-load-button,
+.gun-option-cycle button {
+  border: 1px solid currentColor;
+  color: #e9eee9;
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+}
+.gun-customizer-heading button { padding: 7px 9px; font-size: 9px; }
+
+.gun-callout {
+  position: absolute;
+  top: 20%;
+  width: min(310px, 31vw);
+  min-height: 260px;
+  padding: 14px;
+  border: 2px solid rgba(232, 238, 233, 0.78);
+  background: rgba(7, 11, 11, 0.92);
+  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.24);
+}
+
+.tooling-callout { left: 4vw; border-color: var(--shape-color); }
+.muzzle-callout { right: 4vw; border-color: var(--mode-color); }
+
+.gun-callout > span,
+.gun-callout > strong,
+.gun-callout > small { display: block; }
+.gun-callout > span { color: #7f8b85; font-size: 9px; }
+.gun-callout > strong { margin-top: 5px; font-size: 18px; }
+.gun-callout > small { min-height: 42px; margin-top: 7px; color: #c4cec9; font-size: 9px; line-height: 1.45; }
+
+.gun-option-cycle {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 38px;
+  align-items: stretch;
+  gap: 7px;
+  margin-top: 13px;
+}
+
+.gun-option-cycle button { min-height: 88px; font-size: 28px; }
+.gun-option-cycle button:hover,
+.gun-option-cycle button:focus-visible,
+.gun-load-button:hover,
+.gun-load-button:focus-visible,
+.gun-customizer-heading button:hover,
+.gun-customizer-heading button:focus-visible {
+  color: #0c1110;
+  background: #e9eee9;
+  outline: none;
+}
+
+.gun-option-cycle > div {
+  display: grid;
+  align-content: center;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid rgba(230, 238, 233, 0.22);
+  text-align: center;
+}
+
+.gun-option-cycle b,
+.gun-option-cycle em,
+.gun-option-cycle small { display: block; }
+.gun-option-cycle b { font-size: 13px; }
+.gun-option-cycle em { margin-top: 6px; color: #d5ddd8; font-size: 8px; font-style: normal; line-height: 1.4; }
+.gun-option-cycle small { margin-top: 7px; color: #7f8b85; font-size: 8px; }
+
+.gun-load-button {
+  width: 100%;
+  margin-top: 9px;
+  padding: 9px 8px;
+  font-size: 9px;
+}
+.gun-load-button:disabled { opacity: 0.42; cursor: not-allowed; }
+
+.gun-callout-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.gun-callout-lines polyline,
+.gun-callout-lines circle {
+  fill: none;
+  stroke: rgba(238, 245, 240, 0.78);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.gun-callout-lines circle { fill: rgba(238, 245, 240, 0.92); }
+
+.gun-customizer-help {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  padding: 8px 11px;
+  border: 1px solid rgba(232, 238, 233, 0.42);
+  color: #aab5af;
+  background: rgba(7, 11, 11, 0.9);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .gun-customizer { overflow: auto; padding: 78px 12px 70px; }
+  .gun-customizer-heading { top: 12px; width: calc(100% - 24px); }
+  .gun-callout {
+    position: relative;
+    top: auto;
+    right: auto;
+    left: auto;
+    width: 100%;
+    min-height: 0;
+    margin-bottom: 12px;
+  }
+  .gun-callout-lines { display: none; }
+  .gun-customizer-help { bottom: 10px; max-width: calc(100% - 20px); white-space: normal; text-align: center; }
+}
