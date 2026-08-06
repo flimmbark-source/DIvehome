@@ -4,7 +4,7 @@ import { enemyWorldPosition } from './world.js'
 
 export function combatTargets(run, config = APPARATUS_CONFIG) {
   const targets = run.enemies
-    .filter((enemy) => enemy.routeZ - run.travelDistance > 0)
+    .filter((enemy) => enemy.routeZ - run.travelDistance > config.CRAFT_PLANE_DISTANCE)
     .map((enemy) => ({
       id: enemy.id,
       type: 'enemy',
