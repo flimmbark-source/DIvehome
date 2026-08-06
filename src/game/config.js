@@ -4,9 +4,20 @@ export const APPARATUS_CONFIG = Object.freeze({
   INTERACTION_DISTANCE: 8,
   APPROACHING_DISTANCE: 54,
   SPAWN_DISTANCE: 58,
-  INITIAL_SPAWN_INTERVAL: 1.55,
-  MIN_SPAWN_INTERVAL: 0.42,
-  SPAWN_RAMP_PER_SECOND: 0.015,
+
+  // The opening remains readable, then the tunnel switches to increasingly
+  // dense waves. Wave members are clustered in depth so they reach the player
+  // as a group instead of behaving like unrelated single spawns.
+  FIRST_WAVE_AT: 0.65,
+  OPENING_WAVE_SECONDS: 6,
+  INITIAL_WAVE_INTERVAL: 2.35,
+  MIN_WAVE_INTERVAL: 1.7,
+  WAVE_INTERVAL_RAMP_PER_SECOND: 0.012,
+  WAVE_SIZE_RAMP_SECONDS: 14,
+  MAX_WAVE_SIZE: 4,
+  WAVE_DEPTH_SPACING: 0.72,
+  WAVE_DEPTH_JITTER: 1.15,
+
   MAX_OFFSET: 0.76,
   TUBE_RADIUS: 4.8,
   RING_SPACING: 4,
