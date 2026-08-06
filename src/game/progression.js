@@ -1,3 +1,5 @@
+import { normalizeFireMode } from './weapon.js'
+
 export const SHAPE_KEYS = Object.freeze(['drift', 'zigzag', 'orbit', 'corkscrew'])
 
 export const SHAPE_META = Object.freeze({
@@ -116,7 +118,7 @@ export function unloadFurnitureFuel(progression, furnitureId) {
   }
 }
 
-function baseLoadout() {
+function baseLoadout(fireMode = 'projectile') {
   return {
     maxHpBonus: 0,
     startingShield: 0,
@@ -125,6 +127,8 @@ function baseLoadout() {
     projectileRadiusMultiplier: 1,
     projectilePierceBonus: 0,
     homingStrength: 0,
+    toolingShape: null,
+    fireMode: normalizeFireMode(fireMode),
     effects: [],
   }
 }
@@ -156,6 +160,7 @@ function applyToaster(loadout, shape) {
 }
 
 function applyWorkbench(loadout, shape) {
+  loadout.toolingShape = shape
   switch (shape) {
     case 'drift':
       loadout.projectileRadiusMultiplier *= 1.65
@@ -176,7 +181,7 @@ function applyWorkbench(loadout, shape) {
 }
 
 export function prepareRunFromFurniture(progression) {
-  const loadout = baseLoadout()
+  const loadout = baseLoadout(progression.weapon?.fireMode)
   const consumed = []
 
   for (const [furnitureId, shape] of Object.entries(progression.fuel ?? {})) {
