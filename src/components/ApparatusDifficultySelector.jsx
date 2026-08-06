@@ -44,7 +44,7 @@ export default function ApparatusDifficultySelector({ initialLevel = 0, onStart,
           event.preventDefault()
           start()
         }
-        if (event.code === 'Escape') {
+        if (event.code === 'Backspace') {
           event.preventDefault()
           onClose()
         }
@@ -97,7 +97,7 @@ export default function ApparatusDifficultySelector({ initialLevel = 0, onStart,
         </div>
 
         <div className="difficulty-actions">
-          <span>← → ADJUST · E / ENTER DESCEND · ESC CANCEL</span>
+          <span>← → ADJUST · E / ENTER DESCEND · BACKSPACE CANCEL</span>
           <button type="button" onClick={start}>BEGIN DESCENT</button>
         </div>
       </section>
