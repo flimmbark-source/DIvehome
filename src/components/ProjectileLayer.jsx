@@ -102,10 +102,21 @@ export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit })
     if (!isCombatPhase(runRef.current)) return
 
     const aim = shotRequest.aim
-    scratch.muzzle
-      .set(0.42 + aim.x * 0.44, -0.42 + aim.y * 0.3, -1.62)
-      .applyQuaternion(camera.quaternion)
-      .add(camera.position)
+    const origin = shotRequest.origin
+    if (
+      origin &&
+      Number.isFinite(origin.x) &&
+      Number.isFinite(origin.y) &&
+      Number.isFinite(origin.z)
+    ) {
+      scratch.muzzle.set(origin.x, origin.y, origin.z)
+    } else {
+      scratch.muzzle
+        .set(0.42 + aim.x * 0.44, -0.42 + aim.y * 0.3, -1.62)
+        .applyQuaternion(camera.quaternion)
+        .add(camera.position)
+    }
+
     scratch.target.set(aim.x, aim.y, FAR_AIM_DEPTH).unproject(camera)
     scratch.direction.copy(scratch.target).sub(scratch.muzzle).normalize()
 
