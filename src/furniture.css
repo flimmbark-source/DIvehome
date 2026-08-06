@@ -1,0 +1,212 @@
+.assembler-inventory-grid {
+  align-items: stretch;
+}
+
+.assembler-inventory-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.assembler-inventory-item .recipe-cost {
+  margin-top: auto;
+}
+
+.assembler-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  margin-top: 24px;
+  padding: 36px 18px;
+  border: 2px dashed #686b66;
+  background: rgba(241, 237, 221, 0.52);
+  text-align: center;
+}
+
+.assembler-empty strong {
+  letter-spacing: 0.14em;
+}
+
+.assembler-empty span {
+  color: #686b66;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.furniture-fuel-selector {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  z-index: 85;
+  width: min(660px, calc(100% - 28px));
+  transform: translateX(-50%);
+  padding: 18px 28px 14px;
+  color: #f6f1df;
+  background:
+    linear-gradient(180deg, rgba(14, 16, 16, 0), rgba(14, 16, 16, 0.84) 25%, rgba(14, 16, 16, 0.95));
+  text-align: center;
+  text-shadow: 2px 2px 0 #111414;
+}
+
+.furniture-selector-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.furniture-selector-heading span {
+  color: #aaa99e;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+}
+
+.furniture-selector-heading strong {
+  font-size: 12px;
+  letter-spacing: 0.2em;
+}
+
+.furniture-resource-picker {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) 58px;
+  align-items: center;
+  gap: 14px;
+}
+
+.furniture-resource-arrow {
+  width: 58px;
+  height: 58px;
+  border: 2px solid rgba(246, 241, 223, 0.72);
+  color: #f6f1df;
+  background: rgba(12, 14, 14, 0.72);
+  cursor: pointer;
+  font-size: 42px;
+  line-height: 1;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.32);
+}
+
+.furniture-resource-arrow:hover,
+.furniture-resource-arrow:focus-visible {
+  color: #111414;
+  background: #f6f1df;
+  outline: none;
+}
+
+.furniture-resource-choice {
+  min-width: 0;
+  padding: 4px 12px 8px;
+  border: 0;
+  color: var(--shape-color);
+  background: transparent;
+  cursor: pointer;
+}
+
+.furniture-resource-choice > * {
+  display: block;
+}
+
+.furniture-resource-symbol {
+  margin: -8px 0 -4px;
+  font-size: clamp(58px, 8vw, 86px);
+  line-height: 1;
+  filter: drop-shadow(0 0 12px var(--shape-color));
+}
+
+.furniture-resource-choice > strong {
+  font-size: 17px;
+  letter-spacing: 0.18em;
+}
+
+.furniture-resource-effect {
+  margin-top: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.furniture-resource-choice small {
+  margin-top: 7px;
+  color: #ded8c5;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+}
+
+.furniture-resource-choice:hover .furniture-resource-symbol,
+.furniture-resource-choice:focus-visible .furniture-resource-symbol {
+  transform: translateY(-3px) scale(1.05);
+}
+
+.furniture-resource-choice:focus-visible {
+  outline: 1px solid var(--shape-color);
+  outline-offset: 4px;
+}
+
+.furniture-resource-choice.is-unavailable {
+  opacity: 0.34;
+  cursor: not-allowed;
+}
+
+.furniture-selector-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 30px;
+  margin-top: 4px;
+}
+
+.furniture-selector-footer > span {
+  color: #aaa99e;
+  font-size: 8px;
+  letter-spacing: 0.12em;
+}
+
+.furniture-selector-footer button {
+  padding: 6px 9px;
+  border: 1px solid #d1cbb9;
+  color: #d1cbb9;
+  background: rgba(0, 0, 0, 0.24);
+  cursor: pointer;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+}
+
+.furniture-selector-footer button:hover,
+.furniture-selector-footer button:focus-visible {
+  color: #171919;
+  background: #d1cbb9;
+  outline: none;
+}
+
+@media (max-width: 620px) {
+  .furniture-fuel-selector {
+    bottom: 8px;
+    padding: 14px 10px 10px;
+  }
+
+  .furniture-resource-picker {
+    grid-template-columns: 48px minmax(0, 1fr) 48px;
+    gap: 6px;
+  }
+
+  .furniture-resource-arrow {
+    width: 48px;
+    height: 48px;
+    font-size: 34px;
+  }
+
+  .furniture-resource-choice > strong {
+    font-size: 14px;
+  }
+
+  .furniture-resource-effect {
+    font-size: 10px;
+  }
+
+  .furniture-selector-footer {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
