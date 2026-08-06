@@ -229,12 +229,15 @@ export default function ApparatusRun({ onReturn }) {
   const [loaded, setLoaded] = useState(true)
   const [reloading, setReloading] = useState(false)
   const [recoilPulse, setRecoilPulse] = useState(0)
+  const loadedRef = useRef(true)
+  const reloadingRef = useRef(false)
   const reticleRef = useRef(null)
   const reloadTimerRef = useRef(null)
 
   const fire = useCallback(
     (enemyId) => {
-      if (runRef.current.phase !== 'running' || !loaded || reloading) return
+      if (runRef.current.phase !== 'running' || !loadedRef.current || reloadingRef.current) return
+      loadedRef.current = false
       setLoaded(false)
       setRecoilPulse((value) => value + 1)
       if (enemyId) {
@@ -242,18 +245,21 @@ export default function ApparatusRun({ onReturn }) {
         setSnapshot(runRef.current)
       }
     },
-    [loaded, reloading],
+    [],
   )
 
   const reload = useCallback(() => {
-    if (runRef.current.phase !== 'running' || loaded || reloading) return
+    if (runRef.current.phase !== 'running' || loadedRef.current || reloadingRef.current) return
+    reloadingRef.current = true
     setReloading(true)
     reloadTimerRef.current = window.setTimeout(() => {
+      loadedRef.current = true
+      reloadingRef.current = false
       setLoaded(true)
       setReloading(false)
       reloadTimerRef.current = null
     }, APPARATUS_CONFIG.RELOAD_SECONDS * 1000)
-  }, [loaded, reloading])
+  }, [])
 
   useEffect(() => {
     const onKeyDown = (event) => {
