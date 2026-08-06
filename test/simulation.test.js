@@ -10,85 +10,116 @@ import {
   waveSizeAt,
 } from '../src/game/simulation.js'
 import { APPARATUS_CONFIG } from '../src/game/config.js'
-import { createBoss } from '../src/game/boss.js'
+import { createBoss, tentacleSegmentPosition } from '../src/game/boss.js'
 
-function advanceFor(run, seconds, config = APPARATUS_CONFIG) {
+function advanceFor(run, seconds, config = APPARATUS_CONFIG, controls = {}) {
   let current = run
   let remaining = seconds
   while (remaining > 0) {
     const delta = Math.min(0.05, remaining)
-    current = advanceRun(current, delta, config)
+    current = advanceRun(current, delta, config, controls)
     remaining -= delta
   }
   return current
 }
 
-test('an enemy damages once when it reaches the plane, then stays parked', () => {
+function enemyAt(distance, overrides = {}) {
+  return {
+    id: 'enemy-test',
+    pattern: 'drift',
+    routeZ: distance,
+    offset: { x: 0, y: 0 },
+    homeOffset: { x: 0, y: 0 },
+    phase: 0,
+    state: 'approaching',
+    hasDamaged: false,
+    ...overrides,
+  }
+}
+
+test('a direct craft contact damages once while the enemy continues past', () => {
   const run = {
     ...createRun(1),
     nextSpawnAt: 999,
-    enemies: [
-      {
-        id: 'enemy-test',
-        pattern: 'drift',
-        routeZ: APPARATUS_CONFIG.INTERACTION_DISTANCE + 0.01,
-        offset: { x: 0, y: 0 },
-        phase: 0,
-        state: 'approaching',
-        hasDamaged: false,
-        parkedOffset: null,
-      },
-    ],
+    enemies: [enemyAt(APPARATUS_CONFIG.CRAFT_PLANE_DISTANCE + 0.1)],
   }
 
-  const arrived = advanceRun(run, 0.05)
-  assert.equal(arrived.hp, APPARATUS_CONFIG.STARTING_HP - 1)
-  assert.equal(arrived.enemies[0].state, 'parked')
+  const crossed = advanceRun(run, 0.05, APPARATUS_CONFIG, {
+    craftPosition: { x: 0, y: 0 },
+  })
+  assert.equal(crossed.hp, APPARATUS_CONFIG.STARTING_HP - 1)
+  assert.equal(crossed.enemies[0].state, 'passed')
+  assert.ok(crossed.enemies[0].routeZ - crossed.travelDistance < APPARATUS_CONFIG.CRAFT_PLANE_DISTANCE)
 
-  const stillParked = advanceRun(arrived, 0.05)
-  assert.equal(stillParked.hp, arrived.hp)
-  assert.equal(stillParked.hitsTaken, 1)
+  const fartherPast = advanceRun(crossed, 0.05, APPARATUS_CONFIG, {
+    craftPosition: { x: 0, y: 0 },
+  })
+  assert.equal(fartherPast.hp, crossed.hp)
+  assert.equal(fartherPast.hitsTaken, 1)
 })
 
-test('a prepared shield blocks one arrival without losing hp', () => {
+test('an enemy that misses the craft passes without causing damage', () => {
+  const run = {
+    ...createRun(1),
+    nextSpawnAt: 999,
+    enemies: [enemyAt(APPARATUS_CONFIG.CRAFT_PLANE_DISTANCE + 0.1, { offset: { x: 0.75, y: 0.75 } })],
+  }
+
+  const crossed = advanceRun(run, 0.05, APPARATUS_CONFIG, {
+    craftPosition: { x: -APPARATUS_CONFIG.CRAFT_MAX_X, y: -APPARATUS_CONFIG.CRAFT_MAX_Y },
+  })
+  assert.equal(crossed.hp, APPARATUS_CONFIG.STARTING_HP)
+  assert.equal(crossed.enemies[0].state, 'passed')
+})
+
+test('a prepared shield blocks one actual craft collision', () => {
   const run = {
     ...createRun(1, APPARATUS_CONFIG, { startingShield: 1 }),
     nextSpawnAt: 999,
-    enemies: [
-      {
-        id: 'enemy-test',
-        pattern: 'orbit',
-        routeZ: APPARATUS_CONFIG.INTERACTION_DISTANCE + 0.01,
-        offset: { x: 0, y: 0 },
-        phase: 0,
-        state: 'approaching',
-        hasDamaged: false,
-        parkedOffset: null,
-      },
-    ],
+    enemies: [enemyAt(APPARATUS_CONFIG.CRAFT_PLANE_DISTANCE + 0.1, { pattern: 'drift' })],
   }
 
-  const arrived = advanceRun(run, 0.05)
-  assert.equal(arrived.hp, APPARATUS_CONFIG.STARTING_HP)
-  assert.equal(arrived.shield, 0)
-  assert.equal(arrived.blocks, 1)
+  const crossed = advanceRun(run, 0.05, APPARATUS_CONFIG, {
+    craftPosition: { x: 0, y: 0 },
+  })
+  assert.equal(crossed.hp, APPARATUS_CONFIG.STARTING_HP)
+  assert.equal(crossed.shield, 0)
+  assert.equal(crossed.blocks, 1)
+})
+
+test('nearby enemies bias their path toward the craft', () => {
+  const run = {
+    ...createRun(1),
+    nextSpawnAt: 999,
+    enemies: [enemyAt(18, { offset: { x: -0.5, y: 0 } })],
+  }
+  const advanced = advanceRun(run, 0.05, APPARATUS_CONFIG, {
+    craftPosition: { x: APPARATUS_CONFIG.CRAFT_MAX_X, y: 0 },
+  })
+  assert.ok(advanced.enemies[0].homeOffset.x > 0)
+})
+
+test('holding dive accelerates elapsed time, travel, and spawning together', () => {
+  const config = {
+    ...APPARATUS_CONFIG,
+    FIRST_WAVE_AT: 0.1,
+    INITIAL_WAVE_INTERVAL: 99,
+    MIN_WAVE_INTERVAL: 99,
+    WAVE_INTERVAL_RAMP_PER_SECOND: 0,
+  }
+  const normal = advanceRun(createRun(1, config), 0.05, config, { diving: false })
+  const diving = advanceRun(createRun(1, config), 0.05, config, { diving: true })
+
+  assert.equal(diving.elapsed, normal.elapsed * config.DIVE_TIME_SCALE)
+  assert.equal(diving.travelDistance, normal.travelDistance * config.DIVE_TIME_SCALE)
+  assert.equal(normal.wavesSpawned, 0)
+  assert.equal(diving.wavesSpawned, 1)
 })
 
 test('shooting collects the exact enemy shape', () => {
   const run = {
     ...createRun(1),
-    enemies: [
-      {
-        id: 'enemy-test',
-        pattern: 'corkscrew',
-        routeZ: 20,
-        offset: { x: 0, y: 0 },
-        phase: 0,
-        state: 'approaching',
-        hasDamaged: false,
-        parkedOffset: null,
-      },
-    ],
+    enemies: [enemyAt(20, { pattern: 'corkscrew' })],
   }
 
   const shot = shootEnemy(run, 'enemy-test')
@@ -149,18 +180,7 @@ test('the one-minute descent transitions into a clean boss encounter', () => {
     ...createRun(1),
     elapsed: APPARATUS_CONFIG.ROUND_SECONDS - 0.02,
     nextSpawnAt: 999,
-    enemies: [
-      {
-        id: 'enemy-leftover',
-        pattern: 'drift',
-        routeZ: 50,
-        offset: { x: 0, y: 0 },
-        phase: 0,
-        state: 'approaching',
-        hasDamaged: false,
-        parkedOffset: null,
-      },
-    ],
+    enemies: [enemyAt(50, { id: 'enemy-leftover' })],
   }
 
   const bossRun = advanceRun(run, 0.05)
@@ -170,7 +190,7 @@ test('the one-minute descent transitions into a clean boss encounter', () => {
   assert.equal(bossRun.travelDistance > run.travelDistance, true)
 })
 
-test('a reaching boss tentacle uses the same shield and integrity rules', () => {
+test('a reaching boss tentacle only damages when its tip contacts the craft', () => {
   const boss = createBoss()
   const attackingBoss = {
     ...boss,
@@ -181,6 +201,13 @@ test('a reaching boss tentacle uses the same shield and integrity rules', () => 
         : { ...tentacle, cooldown: 999 },
     ),
   }
+  const reachingTentacle = { ...attackingBoss.tentacles[0], extension: 1 }
+  const tip = reachingTentacle.segments.filter((segment) => segment.alive).at(-1)
+  const tipPosition = tentacleSegmentPosition(
+    reachingTentacle,
+    tip,
+    { ...attackingBoss, elapsed: attackingBoss.elapsed + 0.05 },
+  )
   const run = {
     ...createRun(1, APPARATUS_CONFIG, { startingShield: 1 }),
     phase: 'boss',
@@ -188,7 +215,9 @@ test('a reaching boss tentacle uses the same shield and integrity rules', () => 
     enemies: [],
   }
 
-  const attacked = advanceRun(run, 0.05)
+  const attacked = advanceRun(run, 0.05, APPARATUS_CONFIG, {
+    craftPosition: { x: tipPosition.x, y: tipPosition.y },
+  })
   assert.equal(attacked.hp, APPARATUS_CONFIG.STARTING_HP)
   assert.equal(attacked.shield, 0)
   assert.equal(attacked.blocks, 1)
