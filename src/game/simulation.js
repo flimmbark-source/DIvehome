@@ -1,5 +1,6 @@
 import { APPARATUS_CONFIG, ENEMY_PATTERNS } from './config.js'
 import { advanceBoss, createBoss, destroyBossTarget } from './boss.js'
+import { difficultyFor } from './difficulty.js'
 import { emptyShapeInventory } from './progression.js'
 
 function mulberry32(seed) {
@@ -20,6 +21,7 @@ export function isCombatPhase(stateOrPhase) {
 
 export function createRun(seed = Date.now(), config = APPARATUS_CONFIG, loadout = {}) {
   const maxHp = config.STARTING_HP + Math.max(0, loadout.maxHpBonus ?? 0)
+  const difficulty = difficultyFor(loadout.difficultyLevel)
   return {
     phase: 'running',
     elapsed: 0,
@@ -33,6 +35,8 @@ export function createRun(seed = Date.now(), config = APPARATUS_CONFIG, loadout 
     blocks: 0,
     kills: 0,
     hitsTaken: 0,
+    difficultyLevel: difficulty.level,
+    resourceRemainder: 0,
     shapeDrops: emptyShapeInventory(),
     enemies: [],
     boss: null,
@@ -43,18 +47,22 @@ export function createRun(seed = Date.now(), config = APPARATUS_CONFIG, loadout 
   }
 }
 
-export function spawnIntervalAt(elapsed, config = APPARATUS_CONFIG) {
-  return Math.max(
+export function spawnIntervalAt(elapsed, config = APPARATUS_CONFIG, difficultyLevel = 0) {
+  const difficulty = difficultyFor(difficultyLevel)
+  const baseInterval = Math.max(
     config.MIN_WAVE_INTERVAL,
     config.INITIAL_WAVE_INTERVAL - elapsed * config.WAVE_INTERVAL_RAMP_PER_SECOND,
   )
+  return baseInterval * difficulty.waveIntervalMultiplier
 }
 
-export function waveSizeAt(elapsed, config = APPARATUS_CONFIG) {
+export function waveSizeAt(elapsed, config = APPARATUS_CONFIG, difficultyLevel = 0) {
   if (elapsed < config.OPENING_WAVE_SECONDS) return 1
+  const difficulty = difficultyFor(difficultyLevel)
   const rampSeconds = Math.max(0.01, config.WAVE_SIZE_RAMP_SECONDS)
   const escalation = Math.floor((elapsed - config.OPENING_WAVE_SECONDS) / rampSeconds)
-  return Math.min(config.MAX_WAVE_SIZE, 2 + escalation)
+  const baseWaveSize = Math.min(config.MAX_WAVE_SIZE, 2 + escalation)
+  return baseWaveSize + difficulty.waveSizeBonus
 }
 
 function createEnemy(state, config, memberIndex = 0, waveSize = 1) {
@@ -149,7 +157,7 @@ function advanceOrdinaryRun(state, delta, config) {
       elapsed,
       travelDistance,
       enemies: [],
-      boss: createBoss(config),
+      boss: createBoss(config, state.difficultyLevel),
     }
   }
 
@@ -161,7 +169,7 @@ function advanceOrdinaryRun(state, delta, config) {
 
   while (elapsed >= nextSpawnAt && nextSpawnAt < config.ROUND_SECONDS) {
     const waveElapsed = nextSpawnAt
-    const waveSize = waveSizeAt(waveElapsed, config)
+    const waveSize = waveSizeAt(waveElapsed, config, state.difficultyLevel)
 
     for (let memberIndex = 0; memberIndex < waveSize; memberIndex += 1) {
       const spawnState = { ...state, travelDistance, nextId, seed, wavesSpawned }
@@ -171,7 +179,7 @@ function advanceOrdinaryRun(state, delta, config) {
     }
 
     wavesSpawned += 1
-    nextSpawnAt += spawnIntervalAt(waveElapsed, config)
+    nextSpawnAt += spawnIntervalAt(waveElapsed, config, state.difficultyLevel)
   }
 
   let hp = state.hp
@@ -248,12 +256,19 @@ export function advanceRun(state, deltaSeconds, config = APPARATUS_CONFIG) {
 function shootOrdinaryEnemy(state, enemyId) {
   const enemy = state.enemies.find((candidate) => candidate.id === enemyId)
   if (!enemy) return state
+
+  const difficulty = difficultyFor(state.difficultyLevel)
+  const accumulatedYield = (state.resourceRemainder ?? 0) + difficulty.resourceMultiplier
+  const recoveredShapes = Math.max(1, Math.floor(accumulatedYield + 0.0000001))
+  const resourceRemainder = accumulatedYield - recoveredShapes
+
   return {
     ...state,
     kills: state.kills + 1,
+    resourceRemainder,
     shapeDrops: {
       ...state.shapeDrops,
-      [enemy.pattern]: (state.shapeDrops?.[enemy.pattern] ?? 0) + 1,
+      [enemy.pattern]: (state.shapeDrops?.[enemy.pattern] ?? 0) + recoveredShapes,
     },
     enemies: state.enemies.filter((candidate) => candidate.id !== enemyId),
   }
@@ -287,8 +302,10 @@ export function shapePayout(state, config = APPARATUS_CONFIG) {
   const payout = { ...emptyShapeInventory(), ...state.shapeDrops }
   if (!state.bossRewardGranted) return payout
 
+  const difficulty = difficultyFor(state.difficultyLevel)
   for (const [shape, amount] of Object.entries(config.BOSS_REWARD)) {
-    payout[shape] = (payout[shape] ?? 0) + amount
+    const scaledAmount = Math.max(amount, Math.round(amount * difficulty.resourceMultiplier))
+    payout[shape] = (payout[shape] ?? 0) + scaledAmount
   }
   return payout
 }
