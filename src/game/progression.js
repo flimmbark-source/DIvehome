@@ -14,14 +14,14 @@ export const FURNITURE_RECIPES = Object.freeze({
     id: 'toaster',
     label: 'TOASTER',
     category: 'APPLIANCE',
-    description: 'Consumes one loaded shape when a run begins and converts it into a body or reload effect.',
+    description: 'Consumes one loaded shape when a run begins and applies it to the gun body.',
     cost: Object.freeze({ drift: 2, zigzag: 1 }),
   }),
   workbench: Object.freeze({
     id: 'workbench',
     label: 'WORKBENCH',
     category: 'FURNITURE',
-    description: 'Consumes one loaded shape when a run begins and changes the projectile itself.',
+    description: 'Consumes one loaded shape when a run begins and applies it to the gun clip and projectiles.',
     cost: Object.freeze({ orbit: 2, corkscrew: 1 }),
   }),
 })
@@ -127,6 +127,8 @@ function baseLoadout(fireMode = 'projectile') {
     projectileRadiusMultiplier: 1,
     projectilePierceBonus: 0,
     homingStrength: 0,
+    bodyShape: null,
+    clipShape: null,
     toolingShape: null,
     fireMode: normalizeFireMode(fireMode),
     effects: [],
@@ -134,11 +136,12 @@ function baseLoadout(fireMode = 'projectile') {
 }
 
 function loadoutEffectLabel(furnitureId, shape) {
-  const furnitureLabel = furnitureId === 'toaster' ? 'TOAST' : 'TOOLING'
-  return `${SHAPE_META[shape].label} ${furnitureLabel}: ${furnitureFuelEffect(furnitureId, shape)}`
+  const weaponPart = furnitureId === 'toaster' ? 'BODY' : 'CLIP'
+  return `${SHAPE_META[shape].label} ${weaponPart}: ${furnitureFuelEffect(furnitureId, shape)}`
 }
 
 function applyToaster(loadout, shape) {
+  loadout.bodyShape = shape
   switch (shape) {
     case 'drift':
       loadout.maxHpBonus += 2
@@ -160,6 +163,7 @@ function applyToaster(loadout, shape) {
 }
 
 function applyWorkbench(loadout, shape) {
+  loadout.clipShape = shape
   loadout.toolingShape = shape
   switch (shape) {
     case 'drift':
