@@ -35,19 +35,26 @@ test('loaded furniture fuel is consumed into the next run loadout', () => {
 
   const prepared = prepareRunFromFurniture(state)
   assert.equal(prepared.loadout.maxHpBonus, 2)
+  assert.equal(prepared.loadout.bodyShape, 'drift')
   assert.equal(prepared.progression.fuel.toaster, null)
 })
 
-test('gun mode persists while workbench tooling is consumed into the run', () => {
-  let state = progression({ orbit: 3, corkscrew: 1 })
+test('gun mode and separate body and clip resources persist into the run', () => {
+  let state = progression({ drift: 3, zigzag: 2, orbit: 3, corkscrew: 1 })
+  state = craftFurniture(state, 'toaster')
   state = craftFurniture(state, 'workbench')
+  state = loadFurnitureFuel(state, 'toaster', 'zigzag')
   state = loadFurnitureFuel(state, 'workbench', 'orbit')
   state = setWeaponFireMode(state, 'hitscan')
 
   const prepared = prepareRunFromFurniture(state)
   assert.equal(prepared.loadout.fireMode, 'hitscan')
+  assert.equal(prepared.loadout.bodyShape, 'zigzag')
+  assert.equal(prepared.loadout.clipShape, 'orbit')
   assert.equal(prepared.loadout.toolingShape, 'orbit')
+  assert.equal(prepared.loadout.reloadMultiplier, 0.72)
   assert.equal(prepared.loadout.homingStrength, 3.6)
   assert.equal(prepared.progression.weapon.fireMode, 'hitscan')
+  assert.equal(prepared.progression.fuel.toaster, null)
   assert.equal(prepared.progression.fuel.workbench, null)
 })
