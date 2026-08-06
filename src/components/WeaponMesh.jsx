@@ -11,9 +11,12 @@ export default function WeaponMesh({
   const toolingColor = loadedShape ? SHAPE_META[loadedShape]?.color : '#7bffe0'
   const commonBasic = { depthTest, toneMapped: false }
   const commonStandard = { depthTest, flatShading: true }
+  const inspectionRotation = !depthTest && !flashRef
+    ? [-0.08, Math.PI / 2, -0.04]
+    : [0, 0, 0]
 
   return (
-    <group>
+    <group rotation={inspectionRotation}>
       <mesh>
         <boxGeometry args={[0.34, 0.4, 1.18]} />
         <meshBasicMaterial color="#151719" {...commonBasic} />
