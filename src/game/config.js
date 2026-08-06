@@ -20,6 +20,32 @@ export const APPARATUS_CONFIG = Object.freeze({
   PROJECTILE_RADIUS: 0.18,
   PROJECTILE_MAX_AGE: 2.2,
   ENEMY_HIT_RADIUS: 0.86,
+
+  // The ordinary descent lasts one minute. At that point normal spawning ends,
+  // travel stops, and the shape-face boss assembles at the end of the tunnel.
+  ROUND_SECONDS: 60,
+  BOSS_INTRO_SECONDS: 1.35,
+  BOSS_FACE_Z: -38,
+  BOSS_FACE_SPACING: 0.72,
+  BOSS_FACE_PIECE_RADIUS: 0.46,
+  BOSS_TENTACLE_COUNT: 3,
+  BOSS_TENTACLE_SEGMENTS: 8,
+  BOSS_TENTACLE_NEAR_Z: -2.8,
+  BOSS_TENTACLE_TRAVEL_SECONDS: 4.2,
+  BOSS_TENTACLE_COOLDOWN_SECONDS: 1.1,
+  BOSS_TENTACLE_PIECE_RADIUS: 0.5,
+  BOSS_REGEN_INTERVALS: Object.freeze({
+    3: 0.22,
+    2: 0.52,
+    1: 1.15,
+    0: Number.POSITIVE_INFINITY,
+  }),
+  BOSS_REWARD: Object.freeze({
+    drift: 2,
+    zigzag: 2,
+    orbit: 2,
+    corkscrew: 2,
+  }),
 })
 
 export const ENEMY_PATTERNS = Object.freeze(['drift', 'zigzag', 'orbit', 'corkscrew'])
