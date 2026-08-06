@@ -3,20 +3,16 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import useGameAudio from '../audio/useGameAudio.js'
 import { APPARATUS_CONFIG, tunnelAxisAt } from '../game/config.js'
-import {
-  advanceRun,
-  createRun,
-  patternOffset,
-  prototypePayout,
-  shootEnemy,
-} from '../game/simulation.js'
+import { SHAPE_KEYS, SHAPE_META } from '../game/progression.js'
+import { advanceRun, createRun, shapePayout, shootEnemy } from '../game/simulation.js'
+import { enemyWorldPosition } from '../game/world.js'
+import ProjectileLayer from './ProjectileLayer.jsx'
 
-const ENEMY_COLORS = Object.freeze({
-  drift: '#f0e4bf',
-  zigzag: '#ff766e',
-  orbit: '#83d7ff',
-  corkscrew: '#d790ff',
-})
+const ENEMY_COLORS = Object.freeze(
+  Object.fromEntries(SHAPE_KEYS.map((key) => [key, SHAPE_META[key].color])),
+)
+const FORWARD = new THREE.Vector3(0, 0, -1)
+const RIGHT = new THREE.Vector3(1, 0, 0)
 
 function Tunnel({ runRef }) {
   const ringsRef = useRef([])
@@ -75,7 +71,7 @@ function EnemyGeometry({ pattern }) {
   }
 }
 
-function Enemy({ enemyId, runRef, onFire }) {
+function Enemy({ enemyId, runRef }) {
   const meshRef = useRef()
 
   useFrame(({ clock }) => {
@@ -87,29 +83,10 @@ function Enemy({ enemyId, runRef, onFire }) {
       return
     }
 
+    const world = enemyWorldPosition(enemy, run)
     mesh.visible = true
+    mesh.position.set(world.x, world.y, world.z)
     const parked = enemy.state === 'parked'
-    const distanceAhead = parked
-      ? APPARATUS_CONFIG.INTERACTION_DISTANCE
-      : enemy.routeZ - run.travelDistance
-    const offset = patternOffset(enemy, distanceAhead, run.elapsed)
-
-    if (parked) {
-      mesh.position.set(
-        offset.x * APPARATUS_CONFIG.TUBE_RADIUS,
-        offset.y * APPARATUS_CONFIG.TUBE_RADIUS,
-        -APPARATUS_CONFIG.INTERACTION_DISTANCE,
-      )
-    } else {
-      const enemyAxis = tunnelAxisAt(enemy.routeZ)
-      const currentAxis = tunnelAxisAt(run.travelDistance)
-      mesh.position.set(
-        enemyAxis.x - currentAxis.x + offset.x * APPARATUS_CONFIG.TUBE_RADIUS,
-        enemyAxis.y - currentAxis.y + offset.y * APPARATUS_CONFIG.TUBE_RADIUS,
-        -distanceAhead,
-      )
-    }
-
     const pulse = parked ? 1.06 + Math.sin(clock.elapsedTime * 8 + enemy.phase) * 0.05 : 1
     mesh.scale.setScalar(pulse)
     mesh.rotation.x += 0.012
@@ -121,14 +98,7 @@ function Enemy({ enemyId, runRef, onFire }) {
   const color = ENEMY_COLORS[enemy.pattern]
 
   return (
-    <mesh
-      ref={meshRef}
-      userData={{ enemyId }}
-      onPointerDown={(event) => {
-        event.stopPropagation()
-        onFire(enemyId)
-      }}
-    >
+    <mesh ref={meshRef} userData={{ enemyId }}>
       <EnemyGeometry pattern={enemy.pattern} />
       <meshStandardMaterial
         color={color}
@@ -167,8 +137,11 @@ function GunModel({ shotPulse, aimRef, reloading }) {
     () => ({
       localPosition: new THREE.Vector3(),
       targetPosition: new THREE.Vector3(),
-      localRotation: new THREE.Euler(0, 0, 0, 'YXZ'),
-      localQuaternion: new THREE.Quaternion(),
+      targetPoint: new THREE.Vector3(),
+      direction: new THREE.Vector3(),
+      aimQuaternion: new THREE.Quaternion(),
+      rollQuaternion: new THREE.Quaternion(),
+      recoilQuaternion: new THREE.Quaternion(),
       targetQuaternion: new THREE.Quaternion(),
     }),
     [],
@@ -187,32 +160,34 @@ function GunModel({ shotPulse, aimRef, reloading }) {
 
     const aim = aimRef.current
     const smoothedAim = smoothedAimRef.current
-    smoothedAim.x = THREE.MathUtils.damp(smoothedAim.x, aim.x, 18, delta)
-    smoothedAim.y = THREE.MathUtils.damp(smoothedAim.y, aim.y, 18, delta)
+    smoothedAim.x = THREE.MathUtils.damp(smoothedAim.x, aim.x, 22, delta)
+    smoothedAim.y = THREE.MathUtils.damp(smoothedAim.y, aim.y, 22, delta)
     recoilRef.current = THREE.MathUtils.damp(recoilRef.current, 0, 17, delta)
     reloadPoseRef.current = THREE.MathUtils.damp(reloadPoseRef.current, reloading ? 1 : 0, 13, delta)
 
     const recoil = recoilRef.current
     const reloadPose = reloadPoseRef.current
     transforms.localPosition.set(
-      0.42 + smoothedAim.x * 0.58,
-      -0.44 + smoothedAim.y * 0.36 - reloadPose * 0.24,
-      -1.38 + recoil * 0.36,
+      0.36 + smoothedAim.x * 0.46,
+      -0.46 + smoothedAim.y * 0.29 - reloadPose * 0.25,
+      -1.34 + recoil * 0.42,
     )
     transforms.targetPosition
       .copy(transforms.localPosition)
       .applyQuaternion(camera.quaternion)
       .add(camera.position)
-    group.position.lerp(transforms.targetPosition, 1 - Math.exp(-delta * 24))
+    group.position.lerp(transforms.targetPosition, 1 - Math.exp(-delta * 28))
 
-    transforms.localRotation.set(
-      -0.05 - smoothedAim.y * 0.12 + recoil * 0.24,
-      smoothedAim.x * 0.18,
-      -0.07 - smoothedAim.x * 0.055 + reloadPose * 0.34,
-    )
-    transforms.localQuaternion.setFromEuler(transforms.localRotation)
-    transforms.targetQuaternion.copy(camera.quaternion).multiply(transforms.localQuaternion)
-    group.quaternion.slerp(transforms.targetQuaternion, 1 - Math.exp(-delta * 26))
+    transforms.targetPoint.set(smoothedAim.x, smoothedAim.y, 0.42).unproject(camera)
+    transforms.direction.copy(transforms.targetPoint).sub(group.position).normalize()
+    transforms.aimQuaternion.setFromUnitVectors(FORWARD, transforms.direction)
+    transforms.rollQuaternion.setFromAxisAngle(FORWARD, reloadPose * 0.42 - smoothedAim.x * 0.035)
+    transforms.recoilQuaternion.setFromAxisAngle(RIGHT, recoil * 0.2)
+    transforms.targetQuaternion
+      .copy(transforms.aimQuaternion)
+      .multiply(transforms.recoilQuaternion)
+      .multiply(transforms.rollQuaternion)
+    group.quaternion.slerp(transforms.targetQuaternion, 1 - Math.exp(-delta * 30))
 
     if (flashRef.current) {
       const visible = clock.elapsedTime < flashUntilRef.current
@@ -226,27 +201,47 @@ function GunModel({ shotPulse, aimRef, reloading }) {
   })
 
   return (
-    <group ref={groupRef}>
-      <mesh rotation={[0, 0, -0.06]}>
+    <group ref={groupRef} renderOrder={30}>
+      <mesh>
+        <boxGeometry args={[0.34, 0.4, 1.18]} />
+        <meshBasicMaterial color="#151719" depthTest={false} toneMapped={false} />
+      </mesh>
+      <mesh position={[0, 0.015, -0.01]}>
         <boxGeometry args={[0.28, 0.34, 1.12]} />
-        <meshLambertMaterial color="#272a2b" flatShading />
+        <meshStandardMaterial
+          color="#d7ccb1"
+          emissive="#453b2b"
+          emissiveIntensity={0.55}
+          depthTest={false}
+          toneMapped={false}
+          flatShading
+        />
       </mesh>
       <mesh position={[0, -0.24, 0.2]} rotation={[0.28, 0, 0]}>
-        <boxGeometry args={[0.22, 0.55, 0.28]} />
-        <meshLambertMaterial color="#3c3430" flatShading />
+        <boxGeometry args={[0.24, 0.58, 0.3]} />
+        <meshStandardMaterial color="#3a2922" emissive="#170c08" emissiveIntensity={0.35} depthTest={false} flatShading />
       </mesh>
       <mesh position={[0, 0.02, -0.73]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.075, 0.095, 0.65, 6]} />
-        <meshLambertMaterial color="#17191a" flatShading />
+        <cylinderGeometry args={[0.078, 0.1, 0.68, 6]} />
+        <meshBasicMaterial color="#080a0b" depthTest={false} toneMapped={false} />
       </mesh>
+      <mesh position={[0, 0.2, -0.28]}>
+        <boxGeometry args={[0.055, 0.1, 0.18]} />
+        <meshBasicMaterial color="#7bffe0" depthTest={false} toneMapped={false} />
+      </mesh>
+      <mesh position={[0.145, 0.025, 0.03]}>
+        <boxGeometry args={[0.035, 0.24, 0.72]} />
+        <meshBasicMaterial color="#e8793f" depthTest={false} toneMapped={false} />
+      </mesh>
+      <pointLight position={[0.16, 0.12, -0.45]} color="#ffd18b" intensity={0.75} distance={2.2} />
       <group ref={flashRef} position={[0, 0.02, -1.12]} visible={false}>
         <mesh rotation={[-Math.PI / 2, 0, 0]}>
           <coneGeometry args={[0.25, 0.72, 5]} />
-          <meshBasicMaterial color="#fff2a8" transparent opacity={0.92} depthWrite={false} />
+          <meshBasicMaterial color="#fff2a8" transparent opacity={0.92} depthWrite={false} depthTest={false} toneMapped={false} />
         </mesh>
         <mesh rotation={[-Math.PI / 2, 0, Math.PI / 5]}>
           <coneGeometry args={[0.14, 0.52, 4]} />
-          <meshBasicMaterial color="#ff8a3d" transparent opacity={0.88} depthWrite={false} />
+          <meshBasicMaterial color="#ff8a3d" transparent opacity={0.88} depthWrite={false} depthTest={false} toneMapped={false} />
         </mesh>
         <pointLight color="#ffd180" intensity={7} distance={4.5} decay={2} />
       </group>
@@ -266,7 +261,7 @@ function RunStepper({ runRef, onSnapshot }) {
   return null
 }
 
-function ApparatusScene({ runRef, snapshot, onSnapshot, onFire, shotPulse, aimRef, reloading }) {
+function ApparatusScene({ runRef, snapshot, onSnapshot, onProjectileHit, shotRequest, shotPulse, aimRef, reloading, loadout }) {
   return (
     <>
       <color attach="background" args={['#07090a']} />
@@ -277,20 +272,27 @@ function ApparatusScene({ runRef, snapshot, onSnapshot, onFire, shotPulse, aimRe
       <RunStepper runRef={runRef} onSnapshot={onSnapshot} />
       <Tunnel runRef={runRef} />
       {snapshot.enemies.map((enemy) => (
-        <Enemy key={enemy.id} enemyId={enemy.id} runRef={runRef} onFire={onFire} />
+        <Enemy key={enemy.id} enemyId={enemy.id} runRef={runRef} />
       ))}
+      <ProjectileLayer
+        shotRequest={shotRequest}
+        runRef={runRef}
+        loadout={loadout}
+        onHit={onProjectileHit}
+      />
       <GunModel shotPulse={shotPulse} aimRef={aimRef} reloading={reloading} />
     </>
   )
 }
 
-export default function ApparatusRun({ onReturn }) {
-  const runRef = useRef(createRun())
+export default function ApparatusRun({ loadout = {}, onReturn }) {
+  const runRef = useRef(createRun(Date.now(), APPARATUS_CONFIG, loadout))
   const [snapshot, setSnapshot] = useState(runRef.current)
   const [loaded, setLoaded] = useState(true)
   const [reloading, setReloading] = useState(false)
   const [reloadCycle, setReloadCycle] = useState(0)
   const [shotPulse, setShotPulse] = useState(0)
+  const [shotRequest, setShotRequest] = useState(null)
   const [impactPulse, setImpactPulse] = useState(null)
   const loadedRef = useRef(true)
   const reloadingRef = useRef(false)
@@ -306,6 +308,7 @@ export default function ApparatusRun({ onReturn }) {
     clientY: typeof window === 'undefined' ? 0 : window.innerHeight / 2,
   })
   const audio = useGameAudio()
+  const reloadDuration = APPARATUS_CONFIG.RELOAD_SECONDS * (loadout.reloadMultiplier ?? 1)
 
   const beginReload = useCallback(() => {
     if (runRef.current.phase !== 'running' || reloadingRef.current || loadedRef.current) return
@@ -322,40 +325,41 @@ export default function ApparatusRun({ onReturn }) {
       loadedRef.current = true
       setLoaded(true)
       audio.playReloadComplete()
-    }, APPARATUS_CONFIG.RELOAD_SECONDS * 1000)
-  }, [audio])
+    }, reloadDuration * 1000)
+  }, [audio, reloadDuration])
 
-  const fire = useCallback(
-    (enemyId) => {
-      if (runRef.current.phase !== 'running') return
-      if (!loadedRef.current || reloadingRef.current) {
-        const now = performance.now()
-        if (now - lastDryAtRef.current > 140) {
-          lastDryAtRef.current = now
-          audio.playDry()
-        }
-        return
+  const fire = useCallback(() => {
+    if (runRef.current.phase !== 'running') return
+    if (!loadedRef.current || reloadingRef.current) {
+      const now = performance.now()
+      if (now - lastDryAtRef.current > 140) {
+        lastDryAtRef.current = now
+        audio.playDry()
       }
+      return
+    }
 
-      loadedRef.current = false
-      setLoaded(false)
-      setShotPulse((value) => value + 1)
-      audio.playShot()
+    loadedRef.current = false
+    setLoaded(false)
+    setShotPulse((value) => value + 1)
+    setShotRequest({
+      id: performance.now(),
+      aim: { x: aimRef.current.x, y: aimRef.current.y },
+    })
+    audio.playShot()
+    beginReload()
+  }, [audio, beginReload])
 
-      if (enemyId) {
-        runRef.current = shootEnemy(runRef.current, enemyId)
-        setSnapshot(runRef.current)
-        audio.playEnemyHit()
-        setImpactPulse({
-          id: performance.now(),
-          x: aimRef.current.clientX,
-          y: aimRef.current.clientY,
-        })
-      }
-
-      beginReload()
+  const onProjectileHit = useCallback(
+    (enemyId, _pattern, screenPosition) => {
+      const next = shootEnemy(runRef.current, enemyId)
+      if (next === runRef.current) return
+      runRef.current = next
+      setSnapshot(next)
+      audio.playEnemyHit()
+      setImpactPulse({ id: performance.now(), ...screenPosition })
     },
-    [audio, beginReload],
+    [audio],
   )
 
   useEffect(() => {
@@ -383,7 +387,12 @@ export default function ApparatusRun({ onReturn }) {
     [],
   )
 
-  const payout = prototypePayout(snapshot)
+  const payout = shapePayout(snapshot)
+
+  const returnToRoom = () => {
+    document.getElementById('root')?.requestPointerLock?.()
+    onReturn(payout)
+  }
 
   return (
     <main
@@ -404,7 +413,6 @@ export default function ApparatusRun({ onReturn }) {
         shadows={false}
         gl={{ antialias: false, alpha: false, powerPreference: 'high-performance' }}
         camera={{ fov: 68, near: 0.05, far: 90 }}
-        onPointerMissed={() => fire(null)}
         onCreated={({ gl }) => {
           gl.setClearColor('#07090a')
           gl.outputColorSpace = THREE.SRGBColorSpace
@@ -415,28 +423,49 @@ export default function ApparatusRun({ onReturn }) {
           runRef={runRef}
           snapshot={snapshot}
           onSnapshot={setSnapshot}
-          onFire={fire}
+          onProjectileHit={onProjectileHit}
+          shotRequest={shotRequest}
           shotPulse={shotPulse}
           aimRef={aimRef}
           reloading={reloading}
+          loadout={loadout}
         />
       </Canvas>
 
+      {snapshot.phase === 'running' && (
+        <div
+          className="fire-capture"
+          onPointerDown={(event) => {
+            if (event.button === 0) fire()
+          }}
+          aria-hidden="true"
+        />
+      )}
       <div className="ps1-overlay" aria-hidden="true" />
       <div className="apparatus-hud">
         <div>
           <span>INTEGRITY</span>
-          <strong>{'■'.repeat(snapshot.hp)}{'□'.repeat(APPARATUS_CONFIG.STARTING_HP - snapshot.hp)}</strong>
+          <strong>{'■'.repeat(snapshot.hp)}{'□'.repeat(snapshot.maxHp - snapshot.hp)}</strong>
+        </div>
+        <div>
+          <span>SHIELD</span>
+          <strong>{snapshot.shield > 0 ? '◆'.repeat(snapshot.shield) : '—'}</strong>
         </div>
         <div>
           <span>DEPTH</span>
           <strong>{Math.floor(snapshot.travelDistance).toString().padStart(4, '0')}</strong>
         </div>
         <div>
-          <span>CLEARED</span>
+          <span>COLLECTED</span>
           <strong>{String(snapshot.kills).padStart(3, '0')}</strong>
         </div>
       </div>
+
+      {loadout.effects?.length > 0 && (
+        <div className="active-loadout">
+          {loadout.effects.map((effect) => <span key={effect}>{effect}</span>)}
+        </div>
+      )}
 
       <div className={`weapon-status ${loaded ? 'is-loaded' : ''} ${reloading ? 'is-reloading' : ''}`}>
         <div className="weapon-status-line">
@@ -448,7 +477,7 @@ export default function ApparatusRun({ onReturn }) {
             <i
               key={reloadCycle}
               className="reload-fill is-cycling"
-              style={{ '--reload-duration': `${APPARATUS_CONFIG.RELOAD_SECONDS}s` }}
+              style={{ '--reload-duration': `${reloadDuration}s` }}
             />
           ) : (
             <i className={`reload-fill ${loaded ? 'is-full' : ''}`} />
@@ -492,8 +521,15 @@ export default function ApparatusRun({ onReturn }) {
         <section className="overwhelm-panel">
           <span>CAPACITY EXCEEDED</span>
           <h1>OVERWHELMED</h1>
-          <p>{payout} MATERIAL RECOVERED</p>
-          <button type="button" onClick={() => onReturn(payout)}>
+          <div className="shape-payout">
+            {SHAPE_KEYS.map((shape) => (
+              <div key={shape} style={{ '--shape-color': SHAPE_META[shape].color }}>
+                <strong>{SHAPE_META[shape].symbol} {payout[shape]}</strong>
+                <small>{SHAPE_META[shape].label}</small>
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={returnToRoom}>
             RETURN TO WHITE SPACE
           </button>
         </section>
