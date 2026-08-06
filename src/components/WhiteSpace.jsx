@@ -2,15 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import useGameAudio from '../audio/useGameAudio.js'
-import { SHAPE_KEYS, SHAPE_META } from '../game/progression.js'
+import { FURNITURE_RECIPES, SHAPE_KEYS, SHAPE_META } from '../game/progression.js'
 import AssemblerPanel from './AssemblerPanel.jsx'
+import FurnitureFuelSelector from './FurnitureFuelSelector.jsx'
 
 const APPARATUS_POSITION = new THREE.Vector3(0, 0, -4.4)
 const ASSEMBLER_POSITION = new THREE.Vector3(3.7, 0, -2.8)
+const TOASTER_POSITION = new THREE.Vector3(-3.55, 0, -4.45)
+const WORKBENCH_POSITION = new THREE.Vector3(-3.65, 0, -1.65)
 const PLAYER_HEIGHT = 1.62
 const PLAYER_SPEED = 3.1
 
-function PlayerRig({ mechanismUnlocked, controlsEnabled, onFocusChange, onStep, onUnlockAudio }) {
+function PlayerRig({ mechanismUnlocked, built, controlsEnabled, onFocusChange, onStep, onUnlockAudio }) {
   const { camera, gl } = useThree()
   const keysRef = useRef(new Set())
   const yawRef = useRef(0)
@@ -107,6 +110,8 @@ function PlayerRig({ mechanismUnlocked, controlsEnabled, onFocusChange, onStep, 
 
     const targets = [{ id: 'apparatus', position: APPARATUS_POSITION, reach: 2.65 }]
     if (mechanismUnlocked) targets.push({ id: 'assembler', position: ASSEMBLER_POSITION, reach: 2.45 })
+    if (built?.toaster) targets.push({ id: 'toaster', position: TOASTER_POSITION, reach: 2.25 })
+    if (built?.workbench) targets.push({ id: 'workbench', position: WORKBENCH_POSITION, reach: 2.55 })
 
     let focus = null
     let nearest = Infinity
@@ -217,16 +222,21 @@ function Assembler({ active }) {
   )
 }
 
-function BuiltFurniture({ progression }) {
+function BuiltFurniture({ progression, activeId }) {
   const toasterBuilt = progression.built?.toaster
   const workbenchBuilt = progression.built?.workbench
   return (
     <>
       {toasterBuilt && (
-        <group position={[-3.55, 0, -4.45]} rotation={[0, 0.2, 0]}>
+        <group position={TOASTER_POSITION.toArray()} rotation={[0, 0.2, 0]}>
           <mesh position={[0, 0.55, 0]}>
             <boxGeometry args={[1.3, 1.1, 0.8]} />
-            <meshLambertMaterial color="#a59d89" flatShading />
+            <meshStandardMaterial
+              color="#a59d89"
+              emissive={activeId === 'toaster' ? '#927a3f' : '#241f17'}
+              emissiveIntensity={activeId === 'toaster' ? 0.55 : 0.12}
+              flatShading
+            />
           </mesh>
           <mesh position={[0, 1.22, 0]}>
             <boxGeometry args={[0.82, 0.42, 0.58]} />
@@ -241,10 +251,15 @@ function BuiltFurniture({ progression }) {
       )}
 
       {workbenchBuilt && (
-        <group position={[-3.65, 0, -1.65]} rotation={[0, 0.35, 0]}>
+        <group position={WORKBENCH_POSITION.toArray()} rotation={[0, 0.35, 0]}>
           <mesh position={[0, 0.82, 0]}>
             <boxGeometry args={[2.1, 0.16, 0.85]} />
-            <meshLambertMaterial color="#66513b" flatShading />
+            <meshStandardMaterial
+              color="#66513b"
+              emissive={activeId === 'workbench' ? '#79562f' : '#21160f'}
+              emissiveIntensity={activeId === 'workbench' ? 0.65 : 0.12}
+              flatShading
+            />
           </mesh>
           {[-0.82, 0.82].map((x) => (
             <mesh key={x} position={[x, 0.4, 0]}>
@@ -263,7 +278,8 @@ function BuiltFurniture({ progression }) {
   )
 }
 
-function WhiteRoom({ focusId, progression }) {
+function WhiteRoom({ focusId, activeInterface, progression }) {
+  const activeId = activeInterface ?? focusId
   return (
     <>
       <color attach="background" args={['#d8d7d0']} />
@@ -288,9 +304,9 @@ function WhiteRoom({ focusId, progression }) {
         <meshLambertMaterial color="#d7d5cc" flatShading />
       </mesh>
 
-      <Apparatus active={focusId === 'apparatus'} />
-      {progression.mechanismUnlocked && <Assembler active={focusId === 'assembler'} />}
-      <BuiltFurniture progression={progression} />
+      <Apparatus active={activeId === 'apparatus'} />
+      {progression.mechanismUnlocked && <Assembler active={activeId === 'assembler'} />}
+      <BuiltFurniture progression={progression} activeId={activeId} />
     </>
   )
 }
@@ -298,8 +314,9 @@ function WhiteRoom({ focusId, progression }) {
 export default function WhiteSpace({ progression, onUseApparatus, onCraft, onFuel, onClearFuel }) {
   const [focusId, setFocusId] = useState(null)
   const [pointerLocked, setPointerLocked] = useState(Boolean(document.pointerLockElement))
-  const [assemblerOpen, setAssemblerOpen] = useState(false)
+  const [activeInterface, setActiveInterface] = useState(null)
   const audio = useGameAudio()
+  const interfaceOpen = Boolean(activeInterface)
 
   useEffect(() => {
     const update = () => setPointerLocked(Boolean(document.pointerLockElement))
@@ -313,34 +330,43 @@ export default function WhiteSpace({ progression, onUseApparatus, onCraft, onFue
     onUseApparatus()
   }, [audio, onUseApparatus])
 
-  const openAssembler = useCallback(() => {
+  const openInterface = useCallback((interfaceId) => {
     document.exitPointerLock?.()
-    setAssemblerOpen(true)
+    setActiveInterface(interfaceId)
   }, [])
 
-  const closeAssembler = useCallback(() => {
-    document.getElementById('root')?.requestPointerLock?.()
-    setAssemblerOpen(false)
+  const closeInterface = useCallback(() => {
+    setActiveInterface(null)
+    window.requestAnimationFrame(() => {
+      document.getElementById('root')?.requestPointerLock?.()
+    })
   }, [])
 
   const useFocused = useCallback(() => {
-    if (assemblerOpen) return
+    if (interfaceOpen) return
     if (focusId === 'apparatus') useApparatus()
-    if (focusId === 'assembler') openAssembler()
-  }, [assemblerOpen, focusId, openAssembler, useApparatus])
+    if (focusId === 'assembler') openInterface('assembler')
+    if (focusId === 'toaster' || focusId === 'workbench') openInterface(focusId)
+  }, [focusId, interfaceOpen, openInterface, useApparatus])
 
   useEffect(() => {
     const onKeyDown = (event) => {
-      if (event.code === 'KeyE') useFocused()
-      if (event.code === 'Escape' && assemblerOpen) setAssemblerOpen(false)
+      if (event.code === 'KeyE' && !interfaceOpen) useFocused()
+      if (event.code === 'Escape' && interfaceOpen) {
+        event.preventDefault()
+        closeInterface()
+      }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [assemblerOpen, useFocused])
+  }, [closeInterface, interfaceOpen, useFocused])
 
   const prompt = useMemo(() => {
     if (focusId === 'apparatus') return { title: 'THE APPARATUS', action: 'PRESS E TO ENTER' }
-    if (focusId === 'assembler') return { title: 'THE ASSEMBLER', action: 'PRESS E TO USE' }
+    if (focusId === 'assembler') return { title: 'THE ASSEMBLER', action: 'PRESS E TO BUILD' }
+    if (focusId === 'toaster' || focusId === 'workbench') {
+      return { title: FURNITURE_RECIPES[focusId].label, action: 'PRESS E TO LOAD FUEL' }
+    }
     return null
   }, [focusId])
 
@@ -360,12 +386,13 @@ export default function WhiteSpace({ progression, onUseApparatus, onCraft, onFue
       >
         <PlayerRig
           mechanismUnlocked={progression.mechanismUnlocked}
-          controlsEnabled={!assemblerOpen}
+          built={progression.built}
+          controlsEnabled={!interfaceOpen}
           onFocusChange={setFocusId}
           onStep={audio.playStep}
           onUnlockAudio={audio.unlock}
         />
-        <WhiteRoom focusId={focusId} progression={progression} />
+        <WhiteRoom focusId={focusId} activeInterface={activeInterface} progression={progression} />
       </Canvas>
 
       <div className="ps1-overlay" aria-hidden="true" />
@@ -376,22 +403,31 @@ export default function WhiteSpace({ progression, onUseApparatus, onCraft, onFue
           </span>
         ))}
       </div>
-      {!assemblerOpen && <div className="room-crosshair" aria-hidden="true">+</div>}
-      {!pointerLocked && !assemblerOpen && <div className="room-help">CLICK TO CAPTURE MOUSE · WASD TO MOVE</div>}
-      {prompt && !assemblerOpen && (
+      {!interfaceOpen && <div className="room-crosshair" aria-hidden="true">+</div>}
+      {!pointerLocked && !interfaceOpen && <div className="room-help">CLICK TO CAPTURE MOUSE · WASD TO MOVE</div>}
+      {prompt && !interfaceOpen && (
         <button className="apparatus-prompt" type="button" onClick={useFocused}>
           <strong>{prompt.title}</strong>
           <span>{prompt.action}</span>
         </button>
       )}
 
-      {assemblerOpen && (
+      {activeInterface === 'assembler' && (
         <AssemblerPanel
           progression={progression}
           onCraft={onCraft}
+          onClose={closeInterface}
+        />
+      )}
+
+      {(activeInterface === 'toaster' || activeInterface === 'workbench') && (
+        <FurnitureFuelSelector
+          key={activeInterface}
+          furnitureId={activeInterface}
+          progression={progression}
           onFuel={onFuel}
           onClearFuel={onClearFuel}
-          onClose={closeAssembler}
+          onClose={closeInterface}
         />
       )}
     </main>
