@@ -5,10 +5,14 @@ export default function WeaponMesh({
   depthTest = true,
   fireMode = 'projectile',
   loadedShape = null,
+  bodyShape = null,
+  clipShape = null,
   flashRef = null,
 }) {
   const mode = fireModeFor(fireMode)
-  const toolingColor = loadedShape ? SHAPE_META[loadedShape]?.color : '#7bffe0'
+  const resolvedClipShape = clipShape ?? loadedShape
+  const bodyColor = bodyShape ? SHAPE_META[bodyShape]?.color : '#d7ccb1'
+  const clipColor = resolvedClipShape ? SHAPE_META[resolvedClipShape]?.color : '#7b8580'
   const commonBasic = { depthTest, toneMapped: false }
   const commonStandard = { depthTest, flatShading: true }
   const inspectionRotation = !depthTest && !flashRef
@@ -24,9 +28,9 @@ export default function WeaponMesh({
       <mesh position={[0, 0.015, -0.01]}>
         <boxGeometry args={[0.28, 0.34, 1.12]} />
         <meshStandardMaterial
-          color="#d7ccb1"
-          emissive="#453b2b"
-          emissiveIntensity={0.55}
+          color={bodyColor}
+          emissive={bodyShape ? bodyColor : '#453b2b'}
+          emissiveIntensity={bodyShape ? 0.72 : 0.55}
           toneMapped={false}
           {...commonStandard}
         />
@@ -66,21 +70,33 @@ export default function WeaponMesh({
         )}
       </group>
 
-      <mesh position={[0, 0.2, -0.28]}>
-        <boxGeometry args={[0.075, 0.12, 0.21]} />
+      <mesh position={[0.145, 0.09, -0.18]}>
+        <boxGeometry args={[0.035, 0.18, 0.48]} />
         <meshStandardMaterial
-          color={toolingColor}
-          emissive={toolingColor}
-          emissiveIntensity={loadedShape ? 1.65 : 0.72}
+          color={bodyColor}
+          emissive={bodyColor}
+          emissiveIntensity={bodyShape ? 1.55 : 0.35}
           toneMapped={false}
           {...commonStandard}
         />
       </mesh>
+
+      <mesh position={[0, -0.2, -0.03]} rotation={[0.08, 0, 0]}>
+        <boxGeometry args={[0.21, 0.38, 0.32]} />
+        <meshStandardMaterial
+          color={clipColor}
+          emissive={clipColor}
+          emissiveIntensity={resolvedClipShape ? 1.65 : 0.32}
+          toneMapped={false}
+          {...commonStandard}
+        />
+      </mesh>
+
       <mesh position={[0.145, 0.025, 0.03]}>
         <boxGeometry args={[0.035, 0.24, 0.72]} />
         <meshBasicMaterial color="#e8793f" {...commonBasic} />
       </mesh>
-      <pointLight position={[0.16, 0.12, -0.45]} color={toolingColor} intensity={0.75} distance={2.2} />
+      <pointLight position={[0.16, 0.12, -0.45]} color={bodyShape ? bodyColor : mode.color} intensity={0.75} distance={2.2} />
 
       {flashRef && (
         <group ref={flashRef} position={[0, 0.02, -1.12]} visible={false}>
