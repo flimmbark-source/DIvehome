@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import ApparatusRun from './components/ApparatusRun.jsx'
 import WhiteSpace from './components/WhiteSpace.jsx'
 import {
@@ -24,6 +24,7 @@ export default function App() {
   const [mode, setMode] = useState('room')
   const [progression, setProgression] = useState(INITIAL_PROGRESSION)
   const [runLoadout, setRunLoadout] = useState(null)
+  const roomPoseRef = useRef({ x: 0, z: 3.4, yaw: 0, pitch: -0.04 })
 
   const startApparatus = () => {
     const prepared = prepareRunFromFurniture(progression)
@@ -54,6 +55,7 @@ export default function App() {
   return (
     <WhiteSpace
       progression={progression}
+      roomPoseRef={roomPoseRef}
       onUseApparatus={startApparatus}
       onCraft={(recipeId) => setProgression((current) => craftFurniture(current, recipeId))}
       onFuel={(furnitureId, shapeKey) =>
