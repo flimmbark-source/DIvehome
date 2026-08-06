@@ -6,9 +6,22 @@ import {
   shapePayout,
   shootEnemy,
   shootTarget,
+  spawnIntervalAt,
+  waveSizeAt,
 } from '../src/game/simulation.js'
 import { APPARATUS_CONFIG } from '../src/game/config.js'
 import { createBoss } from '../src/game/boss.js'
+
+function advanceFor(run, seconds, config = APPARATUS_CONFIG) {
+  let current = run
+  let remaining = seconds
+  while (remaining > 0) {
+    const delta = Math.min(0.05, remaining)
+    current = advanceRun(current, delta, config)
+    remaining -= delta
+  }
+  return current
+}
 
 test('an enemy damages once when it reaches the plane, then stays parked', () => {
   const run = {
@@ -83,6 +96,52 @@ test('shooting collects the exact enemy shape', () => {
   assert.equal(shot.enemies.length, 0)
   assert.equal(shapePayout(shot).corkscrew, 1)
   assert.equal(shapePayout(shot).drift, 0)
+})
+
+test('the tunnel escalates from singles into two, three, and four-enemy waves', () => {
+  assert.equal(waveSizeAt(0), 1)
+  assert.equal(waveSizeAt(APPARATUS_CONFIG.OPENING_WAVE_SECONDS - 0.01), 1)
+  assert.equal(waveSizeAt(APPARATUS_CONFIG.OPENING_WAVE_SECONDS), 2)
+  assert.equal(
+    waveSizeAt(APPARATUS_CONFIG.OPENING_WAVE_SECONDS + APPARATUS_CONFIG.WAVE_SIZE_RAMP_SECONDS),
+    3,
+  )
+  assert.equal(
+    waveSizeAt(APPARATUS_CONFIG.OPENING_WAVE_SECONDS + APPARATUS_CONFIG.WAVE_SIZE_RAMP_SECONDS * 2),
+    4,
+  )
+  assert.equal(waveSizeAt(APPARATUS_CONFIG.ROUND_SECONDS - 1), APPARATUS_CONFIG.MAX_WAVE_SIZE)
+})
+
+test('wave intervals tighten after the opening without exceeding the minimum', () => {
+  const openingInterval = spawnIntervalAt(0)
+  const middleInterval = spawnIntervalAt(APPARATUS_CONFIG.ROUND_SECONDS / 2)
+  const lateInterval = spawnIntervalAt(APPARATUS_CONFIG.ROUND_SECONDS * 2)
+
+  assert.ok(middleInterval < openingInterval)
+  assert.equal(lateInterval, APPARATUS_CONFIG.MIN_WAVE_INTERVAL)
+})
+
+test('a wave event spawns its members together with one shared wave id', () => {
+  const config = {
+    ...APPARATUS_CONFIG,
+    FIRST_WAVE_AT: 0.1,
+    OPENING_WAVE_SECONDS: 0,
+    WAVE_SIZE_RAMP_SECONDS: 999,
+    MAX_WAVE_SIZE: 2,
+    INITIAL_WAVE_INTERVAL: 99,
+    MIN_WAVE_INTERVAL: 99,
+    WAVE_INTERVAL_RAMP_PER_SECOND: 0,
+    SPAWN_DISTANCE: 1000,
+  }
+  const run = advanceFor(createRun(7, config), 0.11, config)
+
+  assert.equal(run.enemies.length, 2)
+  assert.equal(run.wavesSpawned, 1)
+  assert.equal(run.enemies[0].waveId, run.enemies[1].waveId)
+  assert.equal(run.enemies[0].waveSize, 2)
+  assert.equal(run.enemies[1].waveSize, 2)
+  assert.ok(Math.abs(run.enemies[1].routeZ - run.enemies[0].routeZ) < 3)
 })
 
 test('the one-minute descent transitions into a clean boss encounter', () => {
