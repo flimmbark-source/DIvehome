@@ -32,7 +32,9 @@ function FuelControls({ furnitureId, inventory, loadedShape, onFuel, onClearFuel
         <span>LOADED FUEL</span>
         <strong
           className={loadedShape ? 'is-loaded' : ''}
-          style={loadedMeta ? { '--shape-color': loadedMeta.color } : undefined}
+          style={loadedMeta
+            ? { color: loadedMeta.color, textShadow: '1px 1px 0 #202425' }
+            : undefined}
         >
           {loadedMeta
             ? `${loadedMeta.symbol} ${loadedMeta.label} — ${loadedEffect}`
