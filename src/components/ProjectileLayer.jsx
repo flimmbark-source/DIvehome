@@ -6,6 +6,7 @@ import { enemyWorldPosition } from '../game/world.js'
 import { segmentIntersectsSphere } from '../game/projectileMath.js'
 
 const FORWARD = new THREE.Vector3(0, 0, -1)
+const FAR_AIM_DEPTH = 1
 
 function ProjectileVisual({ projectileId, projectilesRef, meshRefs }) {
   const projectile = projectilesRef.current.get(projectileId)
@@ -62,7 +63,10 @@ export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit })
       .set(0.42 + aim.x * 0.44, -0.42 + aim.y * 0.3, -1.62)
       .applyQuaternion(camera.quaternion)
       .add(camera.position)
-    scratch.target.set(aim.x, aim.y, 0.45).unproject(camera)
+
+    // Use the far end of the pointer ray. A mid-depth NDC point can sit between
+    // the camera and this offset muzzle, which reverses the shot back at the player.
+    scratch.target.set(aim.x, aim.y, FAR_AIM_DEPTH).unproject(camera)
     scratch.direction.copy(scratch.target).sub(scratch.muzzle).normalize()
 
     const id = `projectile-${nextIdRef.current}`
