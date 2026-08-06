@@ -161,13 +161,30 @@ button {
 .weapon-status {
   right: 24px;
   bottom: 23px;
-  min-width: 142px;
-  padding: 9px 12px;
+  width: 202px;
+  padding: 10px 12px 11px;
   border: 1px solid #d2d1c7;
   color: #e7e3d3;
-  background: rgba(10, 11, 12, 0.76);
-  text-align: center;
-  font-size: 12px;
+  background: rgba(10, 11, 12, 0.82);
+  font-size: 11px;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.32);
+}
+
+.weapon-status-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.weapon-status-line span {
+  color: #858b88;
+  font-size: 9px;
+}
+
+.weapon-status-line strong {
+  font-size: 11px;
 }
 
 .weapon-status.is-loaded {
@@ -176,7 +193,45 @@ button {
 }
 
 .weapon-status.is-reloading {
-  animation: blink 0.22s steps(2, end) infinite;
+  border-color: #e9d487;
+  color: #f1dda0;
+  animation: reload-frame-pulse 0.18s steps(2, end) infinite;
+}
+
+.reload-track {
+  position: relative;
+  width: 100%;
+  height: 9px;
+  overflow: hidden;
+  border: 1px solid rgba(231, 227, 211, 0.75);
+  background: rgba(0, 0, 0, 0.62);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+
+.reload-track::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, transparent 0 13px, rgba(0, 0, 0, 0.44) 13px 15px);
+  pointer-events: none;
+}
+
+.reload-fill {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: #e9d487;
+  box-shadow: 0 0 10px rgba(233, 212, 135, 0.62);
+}
+
+.reload-fill.is-full {
+  width: 100%;
+  background: #75ffc0;
+  box-shadow: 0 0 10px rgba(117, 255, 192, 0.58);
+}
+
+.reload-fill.is-cycling {
+  animation: reload-fill var(--reload-duration, 0.78s) linear forwards;
 }
 
 .aim-reticle {
@@ -231,6 +286,71 @@ button {
 
 .aim-reticle.is-empty {
   opacity: 0.38;
+}
+
+.shot-screen-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 41;
+  pointer-events: none;
+  background: radial-gradient(circle at center, rgba(255, 241, 184, 0.16), transparent 44%);
+  animation: shot-screen-flash 0.12s steps(3, end) forwards;
+}
+
+.shot-reticle-burst {
+  position: fixed;
+  width: 42px;
+  height: 42px;
+  transform: translate(-50%, -50%);
+  border: 2px solid rgba(255, 236, 161, 0.95);
+  border-radius: 50%;
+  box-shadow: 0 0 20px rgba(255, 166, 74, 0.85);
+  animation: shot-reticle-burst 0.16s ease-out forwards;
+}
+
+.shot-reticle-burst::before,
+.shot-reticle-burst::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 58px;
+  height: 2px;
+  background: rgba(255, 225, 141, 0.92);
+  transform: translate(-50%, -50%) rotate(28deg);
+}
+
+.shot-reticle-burst::after {
+  transform: translate(-50%, -50%) rotate(-28deg);
+}
+
+.impact-flash {
+  position: fixed;
+  z-index: 43;
+  width: 28px;
+  height: 28px;
+  transform: translate(-50%, -50%);
+  border: 3px solid #fff7c2;
+  border-radius: 50%;
+  box-shadow: 0 0 18px #ff8a4a, inset 0 0 10px #ffffff;
+  pointer-events: none;
+  animation: impact-flash 0.24s steps(4, end) forwards;
+}
+
+.impact-flash::before,
+.impact-flash::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 46px;
+  height: 3px;
+  background: #fff1a3;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.impact-flash::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
 }
 
 .damage-flash {
@@ -288,8 +408,40 @@ button {
   background: #f2eee0;
 }
 
-@keyframes blink {
-  50% { opacity: 0.42; }
+@keyframes reload-fill {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+@keyframes reload-frame-pulse {
+  50% { background-color: rgba(30, 27, 16, 0.88); }
+}
+
+@keyframes shot-screen-flash {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes shot-reticle-burst {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.45);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.65);
+  }
+}
+
+@keyframes impact-flash {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.55) rotate(0deg);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.8) rotate(25deg);
+  }
 }
 
 @keyframes damage-flash {
@@ -312,5 +464,11 @@ button {
 
   .apparatus-hud strong {
     font-size: 11px;
+  }
+
+  .weapon-status {
+    right: 14px;
+    bottom: 14px;
+    width: 174px;
   }
 }
