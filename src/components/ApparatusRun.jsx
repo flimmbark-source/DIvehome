@@ -15,16 +15,14 @@ import {
 import { fireModeFor, normalizeFireMode, roundsPerTrigger } from '../game/weapon.js'
 import { enemyWorldPosition } from '../game/world.js'
 import BossEncounter from './BossEncounter.jsx'
+import CraftMesh from './CraftMesh.jsx'
 import ProjectileLayer from './ProjectileLayer.jsx'
-import WeaponMesh from './WeaponMesh.jsx'
 
 const ENEMY_COLORS = Object.freeze(
   Object.fromEntries(SHAPE_KEYS.map((key) => [key, SHAPE_META[key].color])),
 )
-const FORWARD = new THREE.Vector3(0, 0, -1)
-const RIGHT = new THREE.Vector3(1, 0, 0)
-const FAR_AIM_DEPTH = 1
 const PROJECTILE_BURST_GAP_MS = 92
+const POINTER_SENSITIVITY = 1.3
 
 function Tunnel({ runRef }) {
   const ringsRef = useRef([])
@@ -96,13 +94,14 @@ function Enemy({ enemyId, runRef }) {
     }
 
     const world = enemyWorldPosition(enemy, run)
+    const distanceAhead = enemy.routeZ - run.travelDistance
     mesh.visible = true
     mesh.position.set(world.x, world.y, world.z)
-    const parked = enemy.state === 'parked'
-    const pulse = parked ? 1.06 + Math.sin(clock.elapsedTime * 8 + enemy.phase) * 0.05 : 1
+    const closePulse = THREE.MathUtils.clamp(1 - distanceAhead / 12, 0, 1)
+    const pulse = 1 + closePulse * (0.04 + Math.sin(clock.elapsedTime * 9 + enemy.phase) * 0.025)
     mesh.scale.setScalar(pulse)
     mesh.rotation.x += 0.012
-    mesh.rotation.y += parked ? 0.018 : 0.026
+    mesh.rotation.y += enemy.state === 'passed' ? 0.04 : 0.026
   })
 
   const enemy = runRef.current.enemies.find((candidate) => candidate.id === enemyId)
@@ -115,7 +114,7 @@ function Enemy({ enemyId, runRef }) {
       <meshStandardMaterial
         color={color}
         emissive={color}
-        emissiveIntensity={enemy.state === 'parked' ? 0.85 : 0.35}
+        emissiveIntensity={enemy.state === 'passed' ? 0.18 : 0.35}
         flatShading
       />
     </mesh>
@@ -136,7 +135,16 @@ function CameraFall({ runRef }) {
   return null
 }
 
-function GunModel({ shotPulse, aimRef, reloading, fireMode, loadedShape }) {
+function ApparatusCraft({
+  shotPulse,
+  aimRef,
+  reloading,
+  fireMode,
+  bodyShape,
+  clipShape,
+  craftRef,
+  diving,
+}) {
   const groupRef = useRef()
   const flashRef = useRef()
   const { camera } = useThree()
@@ -144,17 +152,16 @@ function GunModel({ shotPulse, aimRef, reloading, fireMode, loadedShape }) {
   const reloadPoseRef = useRef(0)
   const flashUntilRef = useRef(0)
   const lastPulseRef = useRef(shotPulse)
-  const smoothedAimRef = useRef({ x: 0, y: 0 })
+  const currentLocalRef = useRef({ x: 0, y: 0 })
   const transforms = useMemo(
     () => ({
       localPosition: new THREE.Vector3(),
-      targetPosition: new THREE.Vector3(),
-      targetPoint: new THREE.Vector3(),
-      direction: new THREE.Vector3(),
-      aimQuaternion: new THREE.Quaternion(),
-      rollQuaternion: new THREE.Quaternion(),
-      recoilQuaternion: new THREE.Quaternion(),
-      targetQuaternion: new THREE.Quaternion(),
+      worldPosition: new THREE.Vector3(),
+      muzzleOffset: new THREE.Vector3(0, 0, -1.18),
+      muzzleWorld: new THREE.Vector3(),
+      localQuaternion: new THREE.Quaternion(),
+      worldQuaternion: new THREE.Quaternion(),
+      euler: new THREE.Euler(),
     }),
     [],
   )
@@ -170,36 +177,59 @@ function GunModel({ shotPulse, aimRef, reloading, fireMode, loadedShape }) {
       flashUntilRef.current = clock.elapsedTime + 0.065
     }
 
-    const aim = aimRef.current
-    const smoothedAim = smoothedAimRef.current
-    smoothedAim.x = THREE.MathUtils.damp(smoothedAim.x, aim.x, 22, delta)
-    smoothedAim.y = THREE.MathUtils.damp(smoothedAim.y, aim.y, 22, delta)
-    recoilRef.current = THREE.MathUtils.damp(recoilRef.current, 0, 17, delta)
-    reloadPoseRef.current = THREE.MathUtils.damp(reloadPoseRef.current, reloading ? 1 : 0, 13, delta)
+    recoilRef.current = THREE.MathUtils.damp(recoilRef.current, 0, 18, delta)
+    reloadPoseRef.current = THREE.MathUtils.damp(reloadPoseRef.current, reloading ? 1 : 0, 11, delta)
+
+    const desiredX = aimRef.current.x * APPARATUS_CONFIG.CRAFT_MAX_X
+    const desiredY = aimRef.current.y * APPARATUS_CONFIG.CRAFT_MAX_Y
+    const current = currentLocalRef.current
+    const previousX = current.x
+    const previousY = current.y
+    current.x = THREE.MathUtils.damp(current.x, desiredX, APPARATUS_CONFIG.CRAFT_FOLLOW_RATE, delta)
+    current.y = THREE.MathUtils.damp(current.y, desiredY, APPARATUS_CONFIG.CRAFT_FOLLOW_RATE, delta)
 
     const recoil = recoilRef.current
     const reloadPose = reloadPoseRef.current
     transforms.localPosition.set(
-      0.36 + smoothedAim.x * 0.46,
-      -0.46 + smoothedAim.y * 0.29 - reloadPose * 0.25,
-      -1.34 + recoil * 0.42,
+      current.x,
+      current.y - reloadPose * 0.08,
+      -APPARATUS_CONFIG.CRAFT_PLANE_DISTANCE + recoil * 0.16,
     )
-    transforms.targetPosition
+    transforms.worldPosition
       .copy(transforms.localPosition)
       .applyQuaternion(camera.quaternion)
       .add(camera.position)
-    group.position.lerp(transforms.targetPosition, 1 - Math.exp(-delta * 28))
+    group.position.lerp(transforms.worldPosition, 1 - Math.exp(-delta * 32))
 
-    transforms.targetPoint.set(smoothedAim.x, smoothedAim.y, FAR_AIM_DEPTH).unproject(camera)
-    transforms.direction.copy(transforms.targetPoint).sub(group.position).normalize()
-    transforms.aimQuaternion.setFromUnitVectors(FORWARD, transforms.direction)
-    transforms.rollQuaternion.setFromAxisAngle(FORWARD, reloadPose * 0.42 - smoothedAim.x * 0.035)
-    transforms.recoilQuaternion.setFromAxisAngle(RIGHT, recoil * 0.2)
-    transforms.targetQuaternion
-      .copy(transforms.aimQuaternion)
-      .multiply(transforms.recoilQuaternion)
-      .multiply(transforms.rollQuaternion)
-    group.quaternion.slerp(transforms.targetQuaternion, 1 - Math.exp(-delta * 30))
+    const velocityX = (current.x - previousX) / Math.max(delta, 0.001)
+    const velocityY = (current.y - previousY) / Math.max(delta, 0.001)
+    transforms.euler.set(
+      (diving ? -0.18 : -0.04) + THREE.MathUtils.clamp(velocityY * 0.012, -0.12, 0.12),
+      0,
+      THREE.MathUtils.clamp(-velocityX * 0.02, -0.34, 0.34),
+      'YXZ',
+    )
+    transforms.localQuaternion.setFromEuler(transforms.euler)
+    transforms.worldQuaternion.copy(camera.quaternion).multiply(transforms.localQuaternion)
+    group.quaternion.slerp(transforms.worldQuaternion, 1 - Math.exp(-delta * 15))
+    group.scale.setScalar(0.84)
+
+    transforms.muzzleWorld
+      .copy(transforms.muzzleOffset)
+      .applyQuaternion(group.quaternion)
+      .add(group.position)
+    craftRef.current = {
+      x: group.position.x,
+      y: group.position.y,
+      z: group.position.z,
+      localX: current.x,
+      localY: current.y,
+      muzzle: {
+        x: transforms.muzzleWorld.x,
+        y: transforms.muzzleWorld.y,
+        z: transforms.muzzleWorld.z,
+      },
+    }
 
     if (flashRef.current) {
       const visible = clock.elapsedTime < flashUntilRef.current
@@ -214,20 +244,25 @@ function GunModel({ shotPulse, aimRef, reloading, fireMode, loadedShape }) {
 
   return (
     <group ref={groupRef} renderOrder={30}>
-      <WeaponMesh
+      <CraftMesh
         depthTest={false}
         fireMode={fireMode}
-        loadedShape={loadedShape}
+        bodyShape={bodyShape}
+        clipShape={clipShape}
         flashRef={flashRef}
+        diving={diving}
       />
     </group>
   )
 }
 
-function RunStepper({ runRef, onSnapshot }) {
+function RunStepper({ runRef, onSnapshot, craftRef, diveRef }) {
   const frameRef = useRef(0)
   useFrame((_, delta) => {
-    runRef.current = advanceRun(runRef.current, delta)
+    runRef.current = advanceRun(runRef.current, delta, APPARATUS_CONFIG, {
+      diving: diveRef.current && runRef.current.phase === 'running',
+      craftPosition: { x: craftRef.current.x, y: craftRef.current.y },
+    })
     frameRef.current += 1
     if (frameRef.current % 4 === 0 || !isCombatPhase(runRef.current)) {
       onSnapshot(runRef.current)
@@ -236,7 +271,20 @@ function RunStepper({ runRef, onSnapshot }) {
   return null
 }
 
-function ApparatusScene({ runRef, snapshot, onSnapshot, onProjectileHit, shotRequest, shotPulse, aimRef, reloading, loadout }) {
+function ApparatusScene({
+  runRef,
+  snapshot,
+  onSnapshot,
+  onProjectileHit,
+  shotRequest,
+  shotPulse,
+  aimRef,
+  reloading,
+  loadout,
+  craftRef,
+  diveRef,
+  diving,
+}) {
   return (
     <>
       <color attach="background" args={['#07090a']} />
@@ -244,7 +292,12 @@ function ApparatusScene({ runRef, snapshot, onSnapshot, onProjectileHit, shotReq
       <ambientLight intensity={0.72} />
       <pointLight position={[0, 0, 1]} intensity={3.2} distance={38} color="#b5f5e3" />
       <CameraFall runRef={runRef} />
-      <RunStepper runRef={runRef} onSnapshot={onSnapshot} />
+      <RunStepper
+        runRef={runRef}
+        onSnapshot={onSnapshot}
+        craftRef={craftRef}
+        diveRef={diveRef}
+      />
       <Tunnel runRef={runRef} />
       {snapshot.enemies.map((enemy) => (
         <Enemy key={enemy.id} enemyId={enemy.id} runRef={runRef} />
@@ -256,12 +309,15 @@ function ApparatusScene({ runRef, snapshot, onSnapshot, onProjectileHit, shotReq
         loadout={loadout}
         onHit={onProjectileHit}
       />
-      <GunModel
+      <ApparatusCraft
         shotPulse={shotPulse}
         aimRef={aimRef}
         reloading={reloading}
         fireMode={loadout.fireMode}
-        loadedShape={loadout.toolingShape}
+        bodyShape={loadout.bodyShape}
+        clipShape={loadout.clipShape}
+        craftRef={craftRef}
+        diving={diving}
       />
     </>
   )
@@ -282,6 +338,13 @@ function ShapeReward({ payout }) {
 
 export default function ApparatusRun({ loadout = {}, onReturn }) {
   const runRef = useRef(createRun(Date.now(), APPARATUS_CONFIG, loadout))
+  const craftRef = useRef({
+    x: 0,
+    y: 0,
+    z: -APPARATUS_CONFIG.CRAFT_PLANE_DISTANCE,
+    muzzle: { x: 0, y: 0, z: -APPARATUS_CONFIG.CRAFT_PLANE_DISTANCE - 1.18 },
+  })
+  const diveRef = useRef(false)
   const [snapshot, setSnapshot] = useState(runRef.current)
   const [loaded, setLoaded] = useState(true)
   const [reloading, setReloading] = useState(false)
@@ -289,6 +352,8 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
   const [shotPulse, setShotPulse] = useState(0)
   const [shotRequest, setShotRequest] = useState(null)
   const [impactPulse, setImpactPulse] = useState(null)
+  const [diving, setDiving] = useState(false)
+  const [pointerLocked, setPointerLocked] = useState(Boolean(document.pointerLockElement))
   const loadedRef = useRef(true)
   const reloadingRef = useRef(false)
   const burstActiveRef = useRef(false)
@@ -309,6 +374,15 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
   const reloadDuration = APPARATUS_CONFIG.RELOAD_SECONDS * (loadout.reloadMultiplier ?? 1)
   const fireMode = normalizeFireMode(loadout.fireMode)
   const fireModeMeta = fireModeFor(fireMode)
+
+  const updateReticle = useCallback(() => {
+    const aim = aimRef.current
+    aim.clientX = (aim.x * 0.5 + 0.5) * window.innerWidth
+    aim.clientY = (-aim.y * 0.5 + 0.5) * window.innerHeight
+    if (reticleRef.current) {
+      reticleRef.current.style.transform = `translate(${aim.clientX}px, ${aim.clientY}px)`
+    }
+  }, [])
 
   const beginReload = useCallback(() => {
     if (
@@ -342,6 +416,7 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
       id,
       mode: fireMode,
       aim: { x: aimRef.current.x, y: aimRef.current.y },
+      origin: { ...craftRef.current.muzzle },
     })
     audio.playShot()
   }, [audio, fireMode])
@@ -394,14 +469,63 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
   )
 
   useEffect(() => {
+    const root = document.getElementById('root')
+    if (!document.pointerLockElement) root?.requestPointerLock?.()
+
+    const onPointerLockChange = () => setPointerLocked(Boolean(document.pointerLockElement))
+    const onMouseMove = (event) => {
+      const aim = aimRef.current
+      if (document.pointerLockElement) {
+        aim.x = THREE.MathUtils.clamp(
+          aim.x + (event.movementX / Math.max(1, window.innerWidth)) * 2 * POINTER_SENSITIVITY,
+          -1,
+          1,
+        )
+        aim.y = THREE.MathUtils.clamp(
+          aim.y - (event.movementY / Math.max(1, window.innerHeight)) * 2 * POINTER_SENSITIVITY,
+          -1,
+          1,
+        )
+      } else if (Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+        aim.x = THREE.MathUtils.clamp((event.clientX / Math.max(1, window.innerWidth)) * 2 - 1, -1, 1)
+        aim.y = THREE.MathUtils.clamp(1 - (event.clientY / Math.max(1, window.innerHeight)) * 2, -1, 1)
+      }
+      updateReticle()
+    }
     const onKeyDown = (event) => {
       if (event.code === 'KeyR') beginReload()
+      if (event.code === 'KeyW' && runRef.current.phase === 'running') {
+        event.preventDefault()
+        diveRef.current = true
+        setDiving(true)
+      }
     }
+    const stopDive = (event) => {
+      if (!event || event.code === 'KeyW') {
+        diveRef.current = false
+        setDiving(false)
+      }
+    }
+
+    document.addEventListener('pointerlockchange', onPointerLockChange)
+    window.addEventListener('mousemove', onMouseMove)
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [beginReload])
+    window.addEventListener('keyup', stopDive)
+    window.addEventListener('blur', stopDive)
+    return () => {
+      document.removeEventListener('pointerlockchange', onPointerLockChange)
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', stopDive)
+      window.removeEventListener('blur', stopDive)
+    }
+  }, [beginReload, updateReticle])
 
   useEffect(() => {
+    if (snapshot.phase !== 'running' && diving) {
+      diveRef.current = false
+      setDiving(false)
+    }
     if (snapshot.hitsTaken > lastHitsRef.current) audio.playDamage()
     lastHitsRef.current = snapshot.hitsTaken
 
@@ -409,10 +533,11 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
       audio.playOverload()
     }
     lastPhaseRef.current = snapshot.phase
-  }, [audio, snapshot.hitsTaken, snapshot.phase])
+  }, [audio, diving, snapshot.hitsTaken, snapshot.phase])
 
   useEffect(
     () => () => {
+      diveRef.current = false
       burstActiveRef.current = false
       if (reloadTimerRef.current) window.clearTimeout(reloadTimerRef.current)
       for (const timer of burstTimersRef.current) window.clearTimeout(timer)
@@ -431,18 +556,7 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
   }
 
   return (
-    <main
-      className="game-shell apparatus-shell"
-      onPointerMove={(event) => {
-        const bounds = event.currentTarget.getBoundingClientRect()
-        const x = THREE.MathUtils.clamp(((event.clientX - bounds.left) / bounds.width) * 2 - 1, -1, 1)
-        const y = THREE.MathUtils.clamp(1 - ((event.clientY - bounds.top) / bounds.height) * 2, -1, 1)
-        aimRef.current = { x, y, clientX: event.clientX, clientY: event.clientY }
-        if (reticleRef.current) {
-          reticleRef.current.style.transform = `translate(${event.clientX}px, ${event.clientY}px)`
-        }
-      }}
-    >
+    <main className="game-shell apparatus-shell">
       <Canvas
         flat
         dpr={0.75}
@@ -465,6 +579,9 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
           aimRef={aimRef}
           reloading={reloading}
           loadout={loadout}
+          craftRef={craftRef}
+          diveRef={diveRef}
+          diving={diving}
         />
       </Canvas>
 
@@ -472,7 +589,12 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
         <div
           className="fire-capture"
           onPointerDown={(event) => {
-            if (event.button === 0) fire()
+            if (event.button !== 0) return
+            if (!document.pointerLockElement) {
+              document.getElementById('root')?.requestPointerLock?.()
+              return
+            }
+            fire()
           }}
           aria-hidden="true"
         />
@@ -512,6 +634,17 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
         )}
       </div>
 
+      {snapshot.phase === 'running' && (
+        <div className={`dive-status ${diving ? 'is-diving' : ''}`}>
+          <span>{diving ? 'DIVING' : 'HOLD W TO DIVE'}</span>
+          <strong>{diving ? `${APPARATUS_CONFIG.DIVE_TIME_SCALE}× FLOW` : 'NORMAL FLOW'}</strong>
+        </div>
+      )}
+
+      {!pointerLocked && isCombatPhase(snapshot) && (
+        <div className="apparatus-lock-warning">CLICK TO RECAPTURE APPARATUS CONTROL</div>
+      )}
+
       {snapshot.phase === 'boss' && snapshot.boss?.elapsed < APPARATUS_CONFIG.BOSS_INTRO_SECONDS && (
         <div className="boss-arrival" aria-hidden="true">
           <span>END OF ROUND</span>
@@ -527,7 +660,7 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
 
       <div className={`weapon-status ${loaded ? 'is-loaded' : ''} ${reloading ? 'is-reloading' : ''}`}>
         <div className="weapon-status-line">
-          <span>{fireModeMeta.label} ×{fireModeMeta.roundsPerTrigger}</span>
+          <span>CRAFT · {fireModeMeta.label} ×{fireModeMeta.roundsPerTrigger}</span>
           <strong>{reloading ? 'CYCLING' : loaded ? 'READY' : 'EMPTY'}</strong>
         </div>
         <div className="reload-track" aria-hidden="true">
