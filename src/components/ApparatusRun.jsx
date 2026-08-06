@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
+import useGameAudio from '../audio/useGameAudio.js'
 import { APPARATUS_CONFIG, tunnelAxisAt } from '../game/config.js'
 import {
   advanceRun,
@@ -153,26 +154,75 @@ function CameraFall({ runRef }) {
   return null
 }
 
-function GunModel({ recoilPulse }) {
+function GunModel({ shotPulse, aimRef, reloading }) {
   const groupRef = useRef()
-  const { camera, pointer } = useThree()
+  const flashRef = useRef()
+  const { camera } = useThree()
   const recoilRef = useRef(0)
-  const lastPulseRef = useRef(recoilPulse)
-  const local = useMemo(() => new THREE.Vector3(), [])
+  const reloadPoseRef = useRef(0)
+  const flashUntilRef = useRef(0)
+  const lastPulseRef = useRef(shotPulse)
+  const smoothedAimRef = useRef({ x: 0, y: 0 })
+  const transforms = useMemo(
+    () => ({
+      localPosition: new THREE.Vector3(),
+      targetPosition: new THREE.Vector3(),
+      localRotation: new THREE.Euler(0, 0, 0, 'YXZ'),
+      localQuaternion: new THREE.Quaternion(),
+      targetQuaternion: new THREE.Quaternion(),
+    }),
+    [],
+  )
 
-  useFrame((_, delta) => {
+  useFrame(({ clock }, rawDelta) => {
+    const delta = Math.min(rawDelta, 0.05)
     const group = groupRef.current
     if (!group) return
-    if (recoilPulse !== lastPulseRef.current) {
-      lastPulseRef.current = recoilPulse
-      recoilRef.current = 0.24
-    }
-    recoilRef.current = THREE.MathUtils.damp(recoilRef.current, 0, 15, delta)
 
-    local.set(0.62 + pointer.x * 0.08, -0.57 + pointer.y * 0.05, -1.45 + recoilRef.current)
-    local.applyQuaternion(camera.quaternion).add(camera.position)
-    group.position.copy(local)
-    group.quaternion.copy(camera.quaternion)
+    if (shotPulse !== lastPulseRef.current) {
+      lastPulseRef.current = shotPulse
+      recoilRef.current = 1
+      flashUntilRef.current = clock.elapsedTime + 0.065
+    }
+
+    const aim = aimRef.current
+    const smoothedAim = smoothedAimRef.current
+    smoothedAim.x = THREE.MathUtils.damp(smoothedAim.x, aim.x, 18, delta)
+    smoothedAim.y = THREE.MathUtils.damp(smoothedAim.y, aim.y, 18, delta)
+    recoilRef.current = THREE.MathUtils.damp(recoilRef.current, 0, 17, delta)
+    reloadPoseRef.current = THREE.MathUtils.damp(reloadPoseRef.current, reloading ? 1 : 0, 13, delta)
+
+    const recoil = recoilRef.current
+    const reloadPose = reloadPoseRef.current
+    transforms.localPosition.set(
+      0.42 + smoothedAim.x * 0.58,
+      -0.44 + smoothedAim.y * 0.36 - reloadPose * 0.24,
+      -1.38 + recoil * 0.36,
+    )
+    transforms.targetPosition
+      .copy(transforms.localPosition)
+      .applyQuaternion(camera.quaternion)
+      .add(camera.position)
+    group.position.lerp(transforms.targetPosition, 1 - Math.exp(-delta * 24))
+
+    transforms.localRotation.set(
+      -0.05 - smoothedAim.y * 0.12 + recoil * 0.24,
+      smoothedAim.x * 0.18,
+      -0.07 - smoothedAim.x * 0.055 + reloadPose * 0.34,
+    )
+    transforms.localQuaternion.setFromEuler(transforms.localRotation)
+    transforms.targetQuaternion.copy(camera.quaternion).multiply(transforms.localQuaternion)
+    group.quaternion.slerp(transforms.targetQuaternion, 1 - Math.exp(-delta * 26))
+
+    if (flashRef.current) {
+      const visible = clock.elapsedTime < flashUntilRef.current
+      flashRef.current.visible = visible
+      if (visible) {
+        const flicker = 0.9 + Math.sin(clock.elapsedTime * 760) * 0.18
+        flashRef.current.scale.setScalar(flicker)
+        flashRef.current.rotation.z += 0.32
+      }
+    }
   })
 
   return (
@@ -185,10 +235,21 @@ function GunModel({ recoilPulse }) {
         <boxGeometry args={[0.22, 0.55, 0.28]} />
         <meshLambertMaterial color="#3c3430" flatShading />
       </mesh>
-      <mesh position={[0, 0.02, -0.73]}>
+      <mesh position={[0, 0.02, -0.73]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.075, 0.095, 0.65, 6]} />
         <meshLambertMaterial color="#17191a" flatShading />
       </mesh>
+      <group ref={flashRef} position={[0, 0.02, -1.12]} visible={false}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]}>
+          <coneGeometry args={[0.25, 0.72, 5]} />
+          <meshBasicMaterial color="#fff2a8" transparent opacity={0.92} depthWrite={false} />
+        </mesh>
+        <mesh rotation={[-Math.PI / 2, 0, Math.PI / 5]}>
+          <coneGeometry args={[0.14, 0.52, 4]} />
+          <meshBasicMaterial color="#ff8a3d" transparent opacity={0.88} depthWrite={false} />
+        </mesh>
+        <pointLight color="#ffd180" intensity={7} distance={4.5} decay={2} />
+      </group>
     </group>
   )
 }
@@ -205,7 +266,7 @@ function RunStepper({ runRef, onSnapshot }) {
   return null
 }
 
-function ApparatusScene({ runRef, snapshot, onSnapshot, onFire, recoilPulse }) {
+function ApparatusScene({ runRef, snapshot, onSnapshot, onFire, shotPulse, aimRef, reloading }) {
   return (
     <>
       <color attach="background" args={['#07090a']} />
@@ -218,7 +279,7 @@ function ApparatusScene({ runRef, snapshot, onSnapshot, onFire, recoilPulse }) {
       {snapshot.enemies.map((enemy) => (
         <Enemy key={enemy.id} enemyId={enemy.id} runRef={runRef} onFire={onFire} />
       ))}
-      <GunModel recoilPulse={recoilPulse} />
+      <GunModel shotPulse={shotPulse} aimRef={aimRef} reloading={reloading} />
     </>
   )
 }
@@ -228,46 +289,92 @@ export default function ApparatusRun({ onReturn }) {
   const [snapshot, setSnapshot] = useState(runRef.current)
   const [loaded, setLoaded] = useState(true)
   const [reloading, setReloading] = useState(false)
-  const [recoilPulse, setRecoilPulse] = useState(0)
+  const [reloadCycle, setReloadCycle] = useState(0)
+  const [shotPulse, setShotPulse] = useState(0)
+  const [impactPulse, setImpactPulse] = useState(null)
   const loadedRef = useRef(true)
   const reloadingRef = useRef(false)
   const reticleRef = useRef(null)
   const reloadTimerRef = useRef(null)
+  const lastDryAtRef = useRef(0)
+  const lastHitsRef = useRef(0)
+  const lastPhaseRef = useRef('running')
+  const aimRef = useRef({
+    x: 0,
+    y: 0,
+    clientX: typeof window === 'undefined' ? 0 : window.innerWidth / 2,
+    clientY: typeof window === 'undefined' ? 0 : window.innerHeight / 2,
+  })
+  const audio = useGameAudio()
+
+  const beginReload = useCallback(() => {
+    if (runRef.current.phase !== 'running' || reloadingRef.current || loadedRef.current) return
+    reloadingRef.current = true
+    setReloading(true)
+    setReloadCycle((value) => value + 1)
+    audio.playReloadStart()
+
+    reloadTimerRef.current = window.setTimeout(() => {
+      reloadingRef.current = false
+      setReloading(false)
+      reloadTimerRef.current = null
+      if (runRef.current.phase !== 'running') return
+      loadedRef.current = true
+      setLoaded(true)
+      audio.playReloadComplete()
+    }, APPARATUS_CONFIG.RELOAD_SECONDS * 1000)
+  }, [audio])
 
   const fire = useCallback(
     (enemyId) => {
-      if (runRef.current.phase !== 'running' || !loadedRef.current || reloadingRef.current) return
+      if (runRef.current.phase !== 'running') return
+      if (!loadedRef.current || reloadingRef.current) {
+        const now = performance.now()
+        if (now - lastDryAtRef.current > 140) {
+          lastDryAtRef.current = now
+          audio.playDry()
+        }
+        return
+      }
+
       loadedRef.current = false
       setLoaded(false)
-      setRecoilPulse((value) => value + 1)
+      setShotPulse((value) => value + 1)
+      audio.playShot()
+
       if (enemyId) {
         runRef.current = shootEnemy(runRef.current, enemyId)
         setSnapshot(runRef.current)
+        audio.playEnemyHit()
+        setImpactPulse({
+          id: performance.now(),
+          x: aimRef.current.clientX,
+          y: aimRef.current.clientY,
+        })
       }
-    },
-    [],
-  )
 
-  const reload = useCallback(() => {
-    if (runRef.current.phase !== 'running' || loadedRef.current || reloadingRef.current) return
-    reloadingRef.current = true
-    setReloading(true)
-    reloadTimerRef.current = window.setTimeout(() => {
-      loadedRef.current = true
-      reloadingRef.current = false
-      setLoaded(true)
-      setReloading(false)
-      reloadTimerRef.current = null
-    }, APPARATUS_CONFIG.RELOAD_SECONDS * 1000)
-  }, [])
+      window.setTimeout(beginReload, 55)
+    },
+    [audio, beginReload],
+  )
 
   useEffect(() => {
     const onKeyDown = (event) => {
-      if (event.code === 'KeyR') reload()
+      if (event.code === 'KeyR') beginReload()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [reload])
+  }, [beginReload])
+
+  useEffect(() => {
+    if (snapshot.hitsTaken > lastHitsRef.current) audio.playDamage()
+    lastHitsRef.current = snapshot.hitsTaken
+
+    if (snapshot.phase === 'overwhelmed' && lastPhaseRef.current !== 'overwhelmed') {
+      audio.playOverload()
+    }
+    lastPhaseRef.current = snapshot.phase
+  }, [audio, snapshot.hitsTaken, snapshot.phase])
 
   useEffect(
     () => () => {
@@ -282,6 +389,10 @@ export default function ApparatusRun({ onReturn }) {
     <main
       className="game-shell apparatus-shell"
       onPointerMove={(event) => {
+        const bounds = event.currentTarget.getBoundingClientRect()
+        const x = THREE.MathUtils.clamp(((event.clientX - bounds.left) / bounds.width) * 2 - 1, -1, 1)
+        const y = THREE.MathUtils.clamp(1 - ((event.clientY - bounds.top) / bounds.height) * 2, -1, 1)
+        aimRef.current = { x, y, clientX: event.clientX, clientY: event.clientY }
         if (reticleRef.current) {
           reticleRef.current.style.transform = `translate(${event.clientX}px, ${event.clientY}px)`
         }
@@ -305,7 +416,9 @@ export default function ApparatusRun({ onReturn }) {
           snapshot={snapshot}
           onSnapshot={setSnapshot}
           onFire={fire}
-          recoilPulse={recoilPulse}
+          shotPulse={shotPulse}
+          aimRef={aimRef}
+          reloading={reloading}
         />
       </Canvas>
 
@@ -326,17 +439,52 @@ export default function ApparatusRun({ onReturn }) {
       </div>
 
       <div className={`weapon-status ${loaded ? 'is-loaded' : ''} ${reloading ? 'is-reloading' : ''}`}>
-        {reloading ? 'RELOADING' : loaded ? 'CHAMBERED' : 'PRESS R'}
+        <div className="weapon-status-line">
+          <span>WEAPON</span>
+          <strong>{reloading ? 'CYCLING' : loaded ? 'READY' : 'EMPTY'}</strong>
+        </div>
+        <div className="reload-track" aria-hidden="true">
+          {reloading ? (
+            <i
+              key={reloadCycle}
+              className="reload-fill is-cycling"
+              style={{ '--reload-duration': `${APPARATUS_CONFIG.RELOAD_SECONDS}s` }}
+            />
+          ) : (
+            <i className={`reload-fill ${loaded ? 'is-full' : ''}`} />
+          )}
+        </div>
       </div>
 
       <div
         ref={reticleRef}
         className={`aim-reticle ${loaded ? 'is-loaded' : 'is-empty'}`}
-        style={{ transform: `translate(${window.innerWidth / 2}px, ${window.innerHeight / 2}px)` }}
+        style={{
+          transform: `translate(${typeof window === 'undefined' ? 0 : window.innerWidth / 2}px, ${
+            typeof window === 'undefined' ? 0 : window.innerHeight / 2
+          }px)`,
+        }}
         aria-hidden="true"
       >
         <i />
       </div>
+
+      {shotPulse > 0 && (
+        <div key={`shot-${shotPulse}`} className="shot-screen-flash" aria-hidden="true">
+          <i
+            className="shot-reticle-burst"
+            style={{ left: aimRef.current.clientX, top: aimRef.current.clientY }}
+          />
+        </div>
+      )}
+      {impactPulse && (
+        <div
+          key={impactPulse.id}
+          className="impact-flash"
+          style={{ left: impactPulse.x, top: impactPulse.y }}
+          aria-hidden="true"
+        />
+      )}
 
       {snapshot.hitsTaken > 0 && <div key={snapshot.hitsTaken} className="damage-flash" aria-hidden="true" />}
 
