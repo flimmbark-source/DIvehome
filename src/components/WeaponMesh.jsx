@@ -1,5 +1,12 @@
+import { useEffect, useState } from 'react'
 import { SHAPE_META } from '../game/progression.js'
 import { fireModeFor } from '../game/weapon.js'
+import CraftMesh from './CraftMesh.jsx'
+
+function initialPreviewMode() {
+  if (typeof window === 'undefined') return 'holster'
+  return window.__divehomeWeaponPreview === 'apparatus' ? 'apparatus' : 'holster'
+}
 
 export default function WeaponMesh({
   depthTest = true,
@@ -15,9 +22,33 @@ export default function WeaponMesh({
   const clipColor = resolvedClipShape ? SHAPE_META[resolvedClipShape]?.color : '#7b8580'
   const commonBasic = { depthTest, toneMapped: false }
   const commonStandard = { depthTest, flatShading: true }
-  const inspectionRotation = !depthTest && !flashRef
+  const inspection = !depthTest && !flashRef
+  const [previewMode, setPreviewMode] = useState(initialPreviewMode)
+  const inspectionRotation = inspection
     ? [-0.08, Math.PI / 2, -0.04]
     : [0, 0, 0]
+
+  useEffect(() => {
+    if (!inspection) return undefined
+    const onPreview = (event) => {
+      setPreviewMode(event.detail === 'apparatus' ? 'apparatus' : 'holster')
+    }
+    window.addEventListener('divehome-weapon-preview', onPreview)
+    return () => window.removeEventListener('divehome-weapon-preview', onPreview)
+  }, [inspection])
+
+  if (inspection && previewMode === 'apparatus') {
+    return (
+      <group rotation={inspectionRotation} scale={0.88}>
+        <CraftMesh
+          depthTest={false}
+          fireMode={fireMode}
+          bodyShape={bodyShape}
+          clipShape={resolvedClipShape}
+        />
+      </group>
+    )
+  }
 
   return (
     <group rotation={inspectionRotation}>
