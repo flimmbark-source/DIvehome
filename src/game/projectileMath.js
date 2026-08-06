@@ -18,3 +18,26 @@ export function segmentIntersectsSphere(start, end, center, radius) {
   const offsetZ = center.z - closestZ
   return offsetX * offsetX + offsetY * offsetY + offsetZ * offsetZ <= radius * radius
 }
+
+export function raySphereIntersectionDistance(origin, direction, center, radius) {
+  const toCenterX = center.x - origin.x
+  const toCenterY = center.y - origin.y
+  const toCenterZ = center.z - origin.z
+  const projection =
+    toCenterX * direction.x +
+    toCenterY * direction.y +
+    toCenterZ * direction.z
+  const centerDistanceSquared =
+    toCenterX * toCenterX +
+    toCenterY * toCenterY +
+    toCenterZ * toCenterZ
+  const perpendicularSquared = centerDistanceSquared - projection * projection
+  const radiusSquared = radius * radius
+  if (perpendicularSquared > radiusSquared) return null
+
+  const offset = Math.sqrt(Math.max(0, radiusSquared - perpendicularSquared))
+  const nearDistance = projection - offset
+  const farDistance = projection + offset
+  if (farDistance < 0) return null
+  return nearDistance >= 0 ? nearDistance : farDistance
+}
