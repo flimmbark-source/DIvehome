@@ -1,4 +1,4 @@
-import { APPARATUS_CONFIG, ENEMY_PATTERNS } from './config.js'
+import { APPARATUS_CONFIG, ENEMY_PATTERNS, tunnelAxisAt } from './config.js'
 import { advanceBoss, createBoss, destroyBossTarget } from './boss.js'
 import { difficultyFor } from './difficulty.js'
 import { emptyShapeInventory } from './progression.js'
@@ -12,6 +12,10 @@ function mulberry32(seed) {
     result ^= result + Math.imul(result ^ (result >>> 7), result | 61)
     return ((result ^ (result >>> 14)) >>> 0) / 4294967296
   }
+}
+
+function clamp(value, minimum, maximum) {
+  return Math.max(minimum, Math.min(maximum, value))
 }
 
 export function isCombatPhase(stateOrPhase) {
@@ -43,6 +47,8 @@ export function createRun(seed = Date.now(), config = APPARATUS_CONFIG, loadout 
     bossPiecesDestroyed: 0,
     bossTentaclesDestroyed: 0,
     bossRewardGranted: false,
+    craftPosition: { x: 0, y: 0 },
+    diving: false,
     seed: seed >>> 0,
   }
 }
@@ -72,10 +78,6 @@ function createEnemy(state, config, memberIndex = 0, waveSize = 1) {
     ? state.wavesSpawned * 1.73 + (memberIndex / waveSize) * Math.PI * 2 + (random() - 0.5) * 0.35
     : random() * Math.PI * 2
   const radius = (waveSize > 1 ? 0.38 + random() * 0.62 : 0.18 + random() * 0.82) * config.MAX_OFFSET
-  const offset = {
-    x: Math.cos(angle) * radius,
-    y: Math.sin(angle) * radius,
-  }
 
   return {
     id: `enemy-${state.nextId}`,
@@ -88,42 +90,56 @@ function createEnemy(state, config, memberIndex = 0, waveSize = 1) {
       config.SPAWN_DISTANCE +
       memberIndex * config.WAVE_DEPTH_SPACING +
       random() * config.WAVE_DEPTH_JITTER,
-    offset,
+    offset: {
+      x: Math.cos(angle) * radius,
+      y: Math.sin(angle) * radius,
+    },
+    homeOffset: { x: 0, y: 0 },
     phase: random() * Math.PI * 2,
     state: 'approaching',
     hasDamaged: false,
-    parkedOffset: null,
   }
 }
 
 export function patternOffset(enemy, distanceAhead, elapsed) {
-  if (enemy.parkedOffset) return enemy.parkedOffset
-
-  const closeness = Math.max(0, Math.min(1, 1 - distanceAhead / APPARATUS_CONFIG.APPROACHING_DISTANCE))
+  const closeness = clamp(1 - distanceAhead / APPARATUS_CONFIG.APPROACHING_DISTANCE, 0, 1)
   const phase = enemy.phase + elapsed
   const amplitude = 0.18 + closeness * 0.38
+  const home = enemy.homeOffset ?? { x: 0, y: 0 }
 
   switch (enemy.pattern) {
     case 'zigzag':
       return {
-        x: enemy.offset.x + Math.sin(phase * 5.2) * amplitude,
-        y: enemy.offset.y + Math.sin(phase * 2.6) * amplitude * 0.28,
+        x: enemy.offset.x + home.x + Math.sin(phase * 5.2) * amplitude,
+        y: enemy.offset.y + home.y + Math.sin(phase * 2.6) * amplitude * 0.28,
       }
     case 'orbit':
       return {
-        x: enemy.offset.x + Math.cos(phase * 2.2) * amplitude,
-        y: enemy.offset.y + Math.sin(phase * 2.2) * amplitude,
+        x: enemy.offset.x + home.x + Math.cos(phase * 2.2) * amplitude,
+        y: enemy.offset.y + home.y + Math.sin(phase * 2.2) * amplitude,
       }
     case 'corkscrew':
       return {
-        x: enemy.offset.x + Math.cos(phase * 4.1) * amplitude * closeness,
-        y: enemy.offset.y + Math.sin(phase * 4.1) * amplitude * closeness,
+        x: enemy.offset.x + home.x + Math.cos(phase * 4.1) * amplitude * closeness,
+        y: enemy.offset.y + home.y + Math.sin(phase * 4.1) * amplitude * closeness,
       }
     default:
       return {
-        x: enemy.offset.x + Math.sin(phase * 1.3) * amplitude * 0.3,
-        y: enemy.offset.y + Math.cos(phase * 1.1) * amplitude * 0.22,
+        x: enemy.offset.x + home.x + Math.sin(phase * 1.3) * amplitude * 0.3,
+        y: enemy.offset.y + home.y + Math.cos(phase * 1.1) * amplitude * 0.22,
       }
+  }
+}
+
+export function enemyPositionAtDistance(enemy, distanceAhead, elapsed, config = APPARATUS_CONFIG) {
+  const offset = patternOffset(enemy, distanceAhead, elapsed)
+  const enemyAxis = tunnelAxisAt(enemy.routeZ, config)
+  const playerTravel = enemy.routeZ - distanceAhead
+  const currentAxis = tunnelAxisAt(playerTravel, config)
+  return {
+    x: enemyAxis.x - currentAxis.x + offset.x * config.TUBE_RADIUS,
+    y: enemyAxis.y - currentAxis.y + offset.y * config.TUBE_RADIUS,
+    z: -distanceAhead,
   }
 }
 
@@ -146,9 +162,21 @@ function absorbHits(state, incomingHits) {
   return { hp: Math.max(0, hp), shield, blocks, hitsTaken }
 }
 
-function advanceOrdinaryRun(state, delta, config) {
+function normalizedCraftPosition(controls, config) {
+  const craft = controls?.craftPosition ?? { x: 0, y: 0 }
+  return {
+    x: clamp(Number.isFinite(craft.x) ? craft.x : 0, -config.CRAFT_MAX_X, config.CRAFT_MAX_X),
+    y: clamp(Number.isFinite(craft.y) ? craft.y : 0, -config.CRAFT_MAX_Y, config.CRAFT_MAX_Y),
+  }
+}
+
+function advanceOrdinaryRun(state, realDelta, config, controls) {
+  const diving = Boolean(controls?.diving)
+  const timeScale = diving ? config.DIVE_TIME_SCALE : 1
+  const delta = realDelta * timeScale
   const elapsed = state.elapsed + delta
   const travelDistance = state.travelDistance + config.TRAVEL_SPEED * delta
+  const craftPosition = normalizedCraftPosition(controls, config)
 
   if (elapsed >= config.ROUND_SECONDS) {
     return {
@@ -158,6 +186,8 @@ function advanceOrdinaryRun(state, delta, config) {
       travelDistance,
       enemies: [],
       boss: createBoss(config, state.difficultyLevel),
+      craftPosition,
+      diving: false,
     }
   }
 
@@ -182,55 +212,71 @@ function advanceOrdinaryRun(state, delta, config) {
     nextSpawnAt += spawnIntervalAt(waveElapsed, config, state.difficultyLevel)
   }
 
-  let hp = state.hp
-  let shield = state.shield ?? 0
-  let blocks = state.blocks ?? 0
-  let hitsTaken = state.hitsTaken
-
-  enemies = enemies.map((enemy) => {
-    if (enemy.state === 'parked') return enemy
-
-    const distanceAhead = enemy.routeZ - travelDistance
-    if (distanceAhead > config.INTERACTION_DISTANCE) return enemy
-
-    const parkedOffset = patternOffset(enemy, config.INTERACTION_DISTANCE, elapsed)
-    if (!enemy.hasDamaged) {
-      if (shield > 0) {
-        shield -= 1
-        blocks += 1
-      } else {
-        hp -= 1
-        hitsTaken += 1
+  let incomingHits = 0
+  enemies = enemies
+    .map((enemy) => {
+      const previousDistance = enemy.routeZ - state.travelDistance
+      const distanceAhead = enemy.routeZ - travelDistance
+      const closeness = clamp(1 - distanceAhead / config.APPROACHING_DISTANCE, 0, 1)
+      const enemyAxis = tunnelAxisAt(enemy.routeZ, config)
+      const currentAxis = tunnelAxisAt(travelDistance, config)
+      const desiredOffset = {
+        x: (craftPosition.x - (enemyAxis.x - currentAxis.x)) / config.TUBE_RADIUS - enemy.offset.x,
+        y: (craftPosition.y - (enemyAxis.y - currentAxis.y)) / config.TUBE_RADIUS - enemy.offset.y,
       }
-    }
+      const homingFactor = Math.min(1, config.ENEMY_HOMING_RATE * delta * (0.28 + closeness * 0.72))
+      const currentHome = enemy.homeOffset ?? { x: 0, y: 0 }
+      const nextEnemy = {
+        ...enemy,
+        homeOffset: {
+          x: currentHome.x + (desiredOffset.x - currentHome.x) * homingFactor,
+          y: currentHome.y + (desiredOffset.y - currentHome.y) * homingFactor,
+        },
+      }
 
-    return {
-      ...enemy,
-      state: 'parked',
-      hasDamaged: true,
-      parkedOffset,
-    }
-  })
+      if (
+        !nextEnemy.hasDamaged &&
+        previousDistance > config.CRAFT_PLANE_DISTANCE &&
+        distanceAhead <= config.CRAFT_PLANE_DISTANCE
+      ) {
+        const contactPosition = enemyPositionAtDistance(
+          nextEnemy,
+          config.CRAFT_PLANE_DISTANCE,
+          elapsed,
+          config,
+        )
+        const dx = contactPosition.x - craftPosition.x
+        const dy = contactPosition.y - craftPosition.y
+        const contactRadius = config.CRAFT_HIT_RADIUS + config.ENEMY_HIT_RADIUS
+        if (dx * dx + dy * dy <= contactRadius * contactRadius) incomingHits += 1
+        nextEnemy.hasDamaged = true
+        nextEnemy.state = 'passed'
+      }
 
+      return nextEnemy
+    })
+    .filter((enemy) => enemy.routeZ - travelDistance >= -config.ENEMY_PASS_CLEANUP_DISTANCE)
+
+  const damage = absorbHits(state, incomingHits)
   return {
     ...state,
-    phase: hp <= 0 ? 'overwhelmed' : 'running',
+    phase: damage.hp <= 0 ? 'overwhelmed' : 'running',
     elapsed,
     travelDistance,
     nextSpawnAt,
     wavesSpawned,
     nextId,
     seed,
-    hp: Math.max(0, hp),
-    shield,
-    blocks,
-    hitsTaken,
+    ...damage,
+    craftPosition,
+    diving,
     enemies,
   }
 }
 
-function advanceBossRun(state, delta, config) {
-  const advanced = advanceBoss(state.boss, delta, config)
+function advanceBossRun(state, delta, config, controls) {
+  const craftPosition = normalizedCraftPosition(controls, config)
+  const advanced = advanceBoss(state.boss, delta, config, craftPosition)
   const damage = absorbHits(state, advanced.attacks)
   const defeated = Boolean(advanced.boss?.defeated)
   const phase = damage.hp <= 0 ? 'overwhelmed' : defeated ? 'victory' : 'boss'
@@ -240,17 +286,19 @@ function advanceBossRun(state, delta, config) {
     phase,
     elapsed: state.elapsed + delta,
     ...damage,
+    craftPosition,
+    diving: false,
     boss: advanced.boss,
     bossRewardGranted: state.bossRewardGranted || defeated,
   }
 }
 
-export function advanceRun(state, deltaSeconds, config = APPARATUS_CONFIG) {
+export function advanceRun(state, deltaSeconds, config = APPARATUS_CONFIG, controls = {}) {
   if (!isCombatPhase(state)) return state
 
   const delta = Math.max(0, Math.min(deltaSeconds, 0.05))
-  if (state.phase === 'boss') return advanceBossRun(state, delta, config)
-  return advanceOrdinaryRun(state, delta, config)
+  if (state.phase === 'boss') return advanceBossRun(state, delta, config, controls)
+  return advanceOrdinaryRun(state, delta, config, controls)
 }
 
 function shootOrdinaryEnemy(state, enemyId) {
@@ -293,7 +341,6 @@ export function shootTarget(state, targetId) {
   }
 }
 
-// Kept as a compatibility alias for the existing simulation tests and callers.
 export function shootEnemy(state, enemyId) {
   return shootTarget(state, enemyId)
 }
