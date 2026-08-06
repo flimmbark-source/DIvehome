@@ -9,6 +9,13 @@ import { combatTargets } from '../game/targets.js'
 const FORWARD = new THREE.Vector3(0, 0, -1)
 const FAR_AIM_DEPTH = 1
 
+function targetDistanceSquared(target, point) {
+  const dx = target.position.x - point.x
+  const dy = target.position.y - point.y
+  const dz = target.position.z - point.z
+  return dx * dx + dy * dy + dz * dz
+}
+
 function ProjectileVisual({ projectileId, projectilesRef, meshRefs }) {
   const projectile = projectilesRef.current.get(projectileId)
   const radius = projectile?.radius ?? APPARATUS_CONFIG.PROJECTILE_RADIUS
@@ -131,8 +138,10 @@ export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit })
       }
 
       const currentTargets = combatTargets(runRef.current)
+        .filter((target) => !projectile.hitIds.has(target.id))
+        .sort((a, b) => targetDistanceSquared(a, scratch.start) - targetDistanceSquared(b, scratch.start))
+
       for (const target of currentTargets) {
-        if (projectile.hitIds.has(target.id)) continue
         scratch.targetPosition.set(target.position.x, target.position.y, target.position.z)
         const hitRadius = target.hitRadius + projectile.radius
         if (!segmentIntersectsSphere(scratch.start, scratch.end, scratch.targetPosition, hitRadius)) continue
