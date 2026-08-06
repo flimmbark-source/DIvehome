@@ -24,6 +24,10 @@ const INITIAL_PROGRESSION = Object.freeze({
   mechanismUnlocked: false,
 })
 
+function ensureRoomPointerLock() {
+  if (!document.pointerLockElement) document.getElementById('root')?.requestPointerLock?.()
+}
+
 export default function App() {
   const [mode, setMode] = useState('room')
   const [progression, setProgression] = useState(INITIAL_PROGRESSION)
@@ -43,14 +47,16 @@ export default function App() {
       difficultyLevel: difficulty.level,
       effects: [...(prepared.loadout.effects ?? []), difficultyEffectLabel(difficulty.level)],
     })
+
+    // The descent currently uses absolute cursor aiming. Keep pointer lock for
+    // every White Space interface, and release it only for this deliberate mode change.
+    document.exitPointerLock?.()
     setMode('apparatus')
   }
 
   const closeDifficulty = () => {
     setDifficultyOpen(false)
-    window.requestAnimationFrame(() => {
-      document.getElementById('root')?.requestPointerLock?.()
-    })
+    ensureRoomPointerLock()
   }
 
   if (mode === 'apparatus') {
@@ -77,6 +83,7 @@ export default function App() {
       <WhiteSpace
         progression={progression}
         roomPoseRef={roomPoseRef}
+        externalInterfaceOpen={difficultyOpen}
         onUseApparatus={() => setDifficultyOpen(true)}
         onCraft={(recipeId) => setProgression((current) => craftFurniture(current, recipeId))}
         onFuel={(furnitureId, shapeKey) =>
