@@ -1,0 +1,316 @@
+:root {
+  font-family: "Courier New", Courier, monospace;
+  color: #17191a;
+  background: #d8d7d0;
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+}
+
+.game-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  user-select: none;
+}
+
+.game-shell canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  image-rendering: pixelated;
+}
+
+.ps1-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 20;
+  opacity: 0.16;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.22) 0, rgba(0, 0, 0, 0.22) 1px, transparent 1px, transparent 3px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.06) 0, rgba(255, 255, 255, 0.06) 1px, transparent 1px, transparent 4px);
+  mix-blend-mode: multiply;
+}
+
+.room-currency,
+.room-help,
+.apparatus-hud,
+.weapon-status {
+  position: absolute;
+  z-index: 30;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.room-currency {
+  top: 22px;
+  left: 24px;
+  padding: 8px 10px;
+  border: 2px solid #303435;
+  background: rgba(224, 223, 215, 0.78);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.room-help {
+  right: 22px;
+  bottom: 20px;
+  padding: 7px 9px;
+  background: rgba(224, 223, 215, 0.72);
+  font-size: 11px;
+}
+
+.room-crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 30;
+  transform: translate(-50%, -50%);
+  color: #252829;
+  font-size: 24px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.apparatus-prompt {
+  position: absolute;
+  left: 50%;
+  bottom: 11%;
+  z-index: 35;
+  transform: translateX(-50%);
+  min-width: 260px;
+  padding: 12px 18px;
+  border: 3px double #1d2021;
+  color: #151718;
+  background: rgba(219, 218, 210, 0.92);
+  cursor: pointer;
+  box-shadow: 6px 6px 0 rgba(22, 25, 26, 0.18);
+}
+
+.apparatus-prompt strong,
+.apparatus-prompt span {
+  display: block;
+}
+
+.apparatus-prompt strong {
+  margin-bottom: 5px;
+  font-size: 16px;
+  letter-spacing: 0.18em;
+}
+
+.apparatus-prompt span {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+}
+
+.apparatus-shell {
+  cursor: none;
+  background: #07090a;
+}
+
+.apparatus-hud {
+  top: 18px;
+  left: 20px;
+  display: flex;
+  gap: 9px;
+  color: #d8fff3;
+  text-shadow: 2px 2px 0 #10201b;
+}
+
+.apparatus-hud > div {
+  min-width: 112px;
+  padding: 8px 10px;
+  border: 1px solid rgba(181, 245, 227, 0.64);
+  background: rgba(4, 14, 12, 0.72);
+}
+
+.apparatus-hud span,
+.apparatus-hud strong {
+  display: block;
+}
+
+.apparatus-hud span {
+  margin-bottom: 5px;
+  color: #80b5a6;
+  font-size: 9px;
+}
+
+.apparatus-hud strong {
+  font-size: 14px;
+}
+
+.weapon-status {
+  right: 24px;
+  bottom: 23px;
+  min-width: 142px;
+  padding: 9px 12px;
+  border: 1px solid #d2d1c7;
+  color: #e7e3d3;
+  background: rgba(10, 11, 12, 0.76);
+  text-align: center;
+  font-size: 12px;
+}
+
+.weapon-status.is-loaded {
+  border-color: #75ffc0;
+  color: #75ffc0;
+}
+
+.weapon-status.is-reloading {
+  animation: blink 0.22s steps(2, end) infinite;
+}
+
+.aim-reticle {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 42;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.aim-reticle::before,
+.aim-reticle::after,
+.aim-reticle i::before,
+.aim-reticle i::after {
+  content: "";
+  position: absolute;
+  background: #dffff3;
+  box-shadow: 1px 1px 0 #06100c;
+}
+
+.aim-reticle::before,
+.aim-reticle::after {
+  width: 9px;
+  height: 2px;
+  top: -1px;
+}
+
+.aim-reticle::before {
+  left: -15px;
+}
+
+.aim-reticle::after {
+  left: 6px;
+}
+
+.aim-reticle i::before,
+.aim-reticle i::after {
+  width: 2px;
+  height: 9px;
+  left: -1px;
+}
+
+.aim-reticle i::before {
+  top: -15px;
+}
+
+.aim-reticle i::after {
+  top: 6px;
+}
+
+.aim-reticle.is-empty {
+  opacity: 0.38;
+}
+
+.damage-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  pointer-events: none;
+  border: 34px solid rgba(255, 50, 58, 0.58);
+  box-shadow: inset 0 0 90px rgba(255, 30, 40, 0.72);
+  animation: damage-flash 0.38s steps(4, end) forwards;
+}
+
+.overwhelm-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  color: #f2eee0;
+  background: rgba(5, 7, 8, 0.88);
+  text-align: center;
+}
+
+.overwhelm-panel span {
+  color: #ff646b;
+  font-size: 12px;
+  letter-spacing: 0.22em;
+}
+
+.overwhelm-panel h1 {
+  margin: 10px 0 14px;
+  font-size: clamp(38px, 8vw, 88px);
+  letter-spacing: 0.08em;
+  text-shadow: 5px 5px 0 #5b171b;
+}
+
+.overwhelm-panel p {
+  margin: 0 0 24px;
+  color: #8fffd0;
+  letter-spacing: 0.12em;
+}
+
+.overwhelm-panel button {
+  padding: 12px 18px;
+  border: 2px solid #f2eee0;
+  color: #f2eee0;
+  background: #16191a;
+  cursor: pointer;
+  letter-spacing: 0.1em;
+}
+
+.overwhelm-panel button:hover {
+  color: #111314;
+  background: #f2eee0;
+}
+
+@keyframes blink {
+  50% { opacity: 0.42; }
+}
+
+@keyframes damage-flash {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@media (max-width: 640px) {
+  .apparatus-hud {
+    right: 14px;
+    left: 14px;
+    gap: 5px;
+  }
+
+  .apparatus-hud > div {
+    min-width: 0;
+    flex: 1;
+    padding: 7px;
+  }
+
+  .apparatus-hud strong {
+    font-size: 11px;
+  }
+}
