@@ -5,9 +5,6 @@ export const APPARATUS_CONFIG = Object.freeze({
   APPROACHING_DISTANCE: 54,
   SPAWN_DISTANCE: 58,
 
-  // The opening remains readable, then the tunnel switches to increasingly
-  // dense waves. Wave members are clustered in depth so they reach the player
-  // as a group instead of behaving like unrelated single spawns.
   FIRST_WAVE_AT: 0.65,
   OPENING_WAVE_SECONDS: 6,
   INITIAL_WAVE_INTERVAL: 2.35,
@@ -26,14 +23,22 @@ export const APPARATUS_CONFIG = Object.freeze({
   UNDULATION_Y: 1.05,
   UNDULATION_FREQ: 0.05,
   TWIST_PER_UNIT: 0.017,
+
+  CRAFT_PLANE_DISTANCE: 2.35,
+  CRAFT_MAX_X: 3.45,
+  CRAFT_MAX_Y: 2.05,
+  CRAFT_HIT_RADIUS: 0.62,
+  CRAFT_FOLLOW_RATE: 4.8,
+  ENEMY_HOMING_RATE: 0.34,
+  ENEMY_PASS_CLEANUP_DISTANCE: 9,
+  DIVE_TIME_SCALE: 2.35,
+
   RELOAD_SECONDS: 0.78,
   PROJECTILE_SPEED: 42,
   PROJECTILE_RADIUS: 0.18,
   PROJECTILE_MAX_AGE: 2.2,
   ENEMY_HIT_RADIUS: 0.86,
 
-  // The ordinary descent lasts one minute. At that point normal spawning ends,
-  // travel stops, and the shape-face boss assembles at the end of the tunnel.
   ROUND_SECONDS: 60,
   BOSS_INTRO_SECONDS: 1.35,
   BOSS_FACE_Z: -38,
