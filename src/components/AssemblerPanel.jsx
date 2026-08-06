@@ -3,6 +3,7 @@ import {
   SHAPE_KEYS,
   SHAPE_META,
   canAffordRecipe,
+  furnitureFuelEffect,
 } from '../game/progression.js'
 
 function Cost({ cost, inventory }) {
@@ -22,12 +23,20 @@ function Cost({ cost, inventory }) {
 }
 
 function FuelControls({ furnitureId, inventory, loadedShape, onFuel, onClearFuel }) {
+  const loadedMeta = loadedShape ? SHAPE_META[loadedShape] : null
+  const loadedEffect = loadedShape ? furnitureFuelEffect(furnitureId, loadedShape) : ''
+
   return (
     <div className="fuel-controls">
       <div className="fuel-current">
         <span>LOADED FUEL</span>
-        <strong>
-          {loadedShape ? `${SHAPE_META[loadedShape].symbol} ${SHAPE_META[loadedShape].label}` : 'EMPTY'}
+        <strong
+          className={loadedShape ? 'is-loaded' : ''}
+          style={loadedMeta ? { '--shape-color': loadedMeta.color } : undefined}
+        >
+          {loadedMeta
+            ? `${loadedMeta.symbol} ${loadedMeta.label} — ${loadedEffect}`
+            : 'EMPTY'}
         </strong>
         {loadedShape && (
           <button type="button" onClick={() => onClearFuel(furnitureId)}>
