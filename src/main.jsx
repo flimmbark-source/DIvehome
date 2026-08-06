@@ -6,6 +6,7 @@ import './furniture.css'
 import './boss.css'
 import './difficulty.css'
 import './gun.css'
+import './craft.css'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
