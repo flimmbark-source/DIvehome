@@ -291,6 +291,7 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
   const [impactPulse, setImpactPulse] = useState(null)
   const loadedRef = useRef(true)
   const reloadingRef = useRef(false)
+  const burstActiveRef = useRef(false)
   const reticleRef = useRef(null)
   const reloadTimerRef = useRef(null)
   const burstTimersRef = useRef([])
@@ -310,7 +311,12 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
   const fireModeMeta = fireModeFor(fireMode)
 
   const beginReload = useCallback(() => {
-    if (!isCombatPhase(runRef.current) || reloadingRef.current || loadedRef.current) return
+    if (
+      !isCombatPhase(runRef.current) ||
+      reloadingRef.current ||
+      loadedRef.current ||
+      burstActiveRef.current
+    ) return
     reloadingRef.current = true
     setReloading(true)
     setReloadCycle((value) => value + 1)
@@ -356,15 +362,21 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
 
     const roundCount = roundsPerTrigger(fireMode)
     if (roundCount === 1) {
+      burstActiveRef.current = false
       emitRound()
       beginReload()
       return
     }
 
+    burstActiveRef.current = true
     burstTimersRef.current = Array.from({ length: roundCount }, (_, index) =>
       window.setTimeout(() => {
         emitRound()
-        if (index === roundCount - 1) beginReload()
+        if (index === roundCount - 1) {
+          burstActiveRef.current = false
+          burstTimersRef.current = []
+          beginReload()
+        }
       }, index * PROJECTILE_BURST_GAP_MS),
     )
   }, [audio, beginReload, emitRound, fireMode])
@@ -401,6 +413,7 @@ export default function ApparatusRun({ loadout = {}, onReturn }) {
 
   useEffect(
     () => () => {
+      burstActiveRef.current = false
       if (reloadTimerRef.current) window.clearTimeout(reloadTimerRef.current)
       for (const timer of burstTimersRef.current) window.clearTimeout(timer)
     },
