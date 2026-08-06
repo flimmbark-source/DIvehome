@@ -8,12 +8,14 @@ import {
   loadFurnitureFuel,
   prepareRunFromFurniture,
 } from '../src/game/progression.js'
+import { emptyWeaponState, setWeaponFireMode } from '../src/game/weapon.js'
 
 function progression(inventory = {}) {
   return {
     inventory: { ...emptyShapeInventory(), ...inventory },
     built: emptyFurnitureState(),
     fuel: emptyFuelState(),
+    weapon: emptyWeaponState(),
     mechanismUnlocked: true,
   }
 }
@@ -34,4 +36,18 @@ test('loaded furniture fuel is consumed into the next run loadout', () => {
   const prepared = prepareRunFromFurniture(state)
   assert.equal(prepared.loadout.maxHpBonus, 2)
   assert.equal(prepared.progression.fuel.toaster, null)
+})
+
+test('gun mode persists while workbench tooling is consumed into the run', () => {
+  let state = progression({ orbit: 3, corkscrew: 1 })
+  state = craftFurniture(state, 'workbench')
+  state = loadFurnitureFuel(state, 'workbench', 'orbit')
+  state = setWeaponFireMode(state, 'hitscan')
+
+  const prepared = prepareRunFromFurniture(state)
+  assert.equal(prepared.loadout.fireMode, 'hitscan')
+  assert.equal(prepared.loadout.toolingShape, 'orbit')
+  assert.equal(prepared.loadout.homingStrength, 3.6)
+  assert.equal(prepared.progression.weapon.fireMode, 'hitscan')
+  assert.equal(prepared.progression.fuel.workbench, null)
 })
