@@ -1,0 +1,176 @@
+.apparatus-difficulty-selector {
+  position: absolute;
+  left: 50%;
+  bottom: 28px;
+  z-index: 90;
+  width: min(760px, calc(100% - 36px));
+  transform: translateX(-50%);
+  padding: 15px 18px 16px;
+  border: 3px double var(--difficulty-color);
+  color: #e8eee9;
+  background: rgba(8, 12, 12, 0.94);
+  box-shadow: 10px 10px 0 rgba(0, 0, 0, 0.32);
+  outline: none;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.difficulty-heading,
+.difficulty-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.difficulty-heading {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--difficulty-color);
+}
+
+.difficulty-heading span,
+.difficulty-actions span {
+  color: #8a9691;
+  font-size: 9px;
+}
+
+.difficulty-heading strong {
+  color: var(--difficulty-color);
+  font-size: 13px;
+}
+
+.difficulty-picker {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 52px;
+  align-items: stretch;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.difficulty-picker > button {
+  min-height: 176px;
+  border: 1px solid var(--difficulty-color);
+  color: var(--difficulty-color);
+  background: rgba(255, 255, 255, 0.035);
+  cursor: pointer;
+  font-size: 38px;
+}
+
+.difficulty-picker > button:hover,
+.difficulty-picker > button:focus-visible {
+  color: #08100d;
+  background: var(--difficulty-color);
+  outline: none;
+}
+
+.difficulty-card {
+  min-width: 0;
+  padding: 13px 16px;
+  border: 1px solid rgba(232, 238, 233, 0.2);
+  background: rgba(255, 255, 255, 0.035);
+  text-align: center;
+}
+
+.difficulty-number {
+  display: block;
+  color: var(--difficulty-color);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.difficulty-card > strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--difficulty-color);
+  font-size: 17px;
+}
+
+.difficulty-card > p {
+  max-width: 570px;
+  margin: 8px auto 12px;
+  color: #c5ccc8;
+  font-size: 10px;
+  line-height: 1.45;
+  letter-spacing: 0.06em;
+  text-transform: none;
+}
+
+.difficulty-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.difficulty-stats span {
+  min-width: 0;
+  padding: 8px 6px;
+  border-top: 1px solid var(--difficulty-color);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.difficulty-stats small,
+.difficulty-stats b {
+  display: block;
+}
+
+.difficulty-stats small {
+  margin-bottom: 5px;
+  color: #79857f;
+  font-size: 7px;
+}
+
+.difficulty-stats b {
+  overflow-wrap: anywhere;
+  color: #f1f5f2;
+  font-size: 9px;
+}
+
+.difficulty-actions button {
+  flex: 0 0 auto;
+  padding: 9px 13px;
+  border: 1px solid var(--difficulty-color);
+  color: #08100d;
+  background: var(--difficulty-color);
+  cursor: pointer;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.difficulty-actions button:hover,
+.difficulty-actions button:focus-visible {
+  color: var(--difficulty-color);
+  background: transparent;
+  outline: none;
+}
+
+@media (max-width: 640px) {
+  .apparatus-difficulty-selector {
+    bottom: 12px;
+    width: calc(100% - 20px);
+    padding: 12px;
+  }
+
+  .difficulty-heading,
+  .difficulty-actions {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .difficulty-picker {
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+  }
+
+  .difficulty-picker > button {
+    min-height: 232px;
+  }
+
+  .difficulty-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .difficulty-actions button {
+    width: 100%;
+  }
+}
