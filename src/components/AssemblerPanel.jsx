@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   FURNITURE_RECIPES,
   SHAPE_KEYS,
@@ -22,19 +23,65 @@ function Cost({ cost, inventory }) {
 }
 
 export default function AssemblerPanel({ progression, onCraft, onClose }) {
-  const unbuiltRecipes = Object.values(FURNITURE_RECIPES).filter(
-    (recipe) => !progression.built?.[recipe.id],
+  const rootRef = useRef(null)
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const unbuiltRecipes = useMemo(
+    () => Object.values(FURNITURE_RECIPES).filter((recipe) => !progression.built?.[recipe.id]),
+    [progression.built],
   )
 
+  useEffect(() => {
+    rootRef.current?.focus()
+  }, [])
+
+  useEffect(() => {
+    setSelectedIndex((current) => Math.max(0, Math.min(current, unbuiltRecipes.length - 1)))
+  }, [unbuiltRecipes.length])
+
+  const cycle = (direction) => {
+    if (unbuiltRecipes.length < 2) return
+    setSelectedIndex((current) => (current + direction + unbuiltRecipes.length) % unbuiltRecipes.length)
+  }
+
+  const assembleSelected = () => {
+    const recipe = unbuiltRecipes[selectedIndex]
+    if (!recipe || !canAffordRecipe(progression.inventory, recipe.id)) return
+    onCraft(recipe.id)
+  }
+
   return (
-    <section className="assembler-panel" aria-label="Shape assembler">
+    <section
+      ref={rootRef}
+      className="assembler-panel"
+      aria-label="Shape assembler"
+      tabIndex={-1}
+      onKeyDownCapture={(event) => {
+        event.stopPropagation()
+        if (event.code === 'ArrowLeft' || event.code === 'KeyA') {
+          event.preventDefault()
+          cycle(-1)
+        }
+        if (event.code === 'ArrowRight' || event.code === 'KeyD') {
+          event.preventDefault()
+          cycle(1)
+        }
+        if (event.code === 'Enter' || event.code === 'KeyE') {
+          event.preventDefault()
+          assembleSelected()
+        }
+        if (event.code === 'Backspace') {
+          event.preventDefault()
+          onClose()
+        }
+      }}
+    >
       <header>
         <div>
           <span>DOMESTIC CONVERSION UNIT</span>
           <h1>THE ASSEMBLER</h1>
         </div>
         <button type="button" className="assembler-close" onClick={onClose}>
-          CLOSE
+          BACKSPACE
         </button>
       </header>
 
@@ -58,10 +105,14 @@ export default function AssemblerPanel({ progression, onCraft, onClose }) {
 
       {unbuiltRecipes.length > 0 ? (
         <div className="recipe-grid assembler-inventory-grid">
-          {unbuiltRecipes.map((recipe) => {
+          {unbuiltRecipes.map((recipe, index) => {
             const affordable = canAffordRecipe(progression.inventory, recipe.id)
             return (
-              <article key={recipe.id} className="recipe-card assembler-inventory-item">
+              <article
+                key={recipe.id}
+                className={`recipe-card assembler-inventory-item ${index === selectedIndex ? 'is-selected' : ''}`}
+                onPointerDown={() => setSelectedIndex(index)}
+              >
                 <div className="recipe-heading">
                   <span>{recipe.category}</span>
                   <h2>{recipe.label}</h2>
@@ -81,6 +132,8 @@ export default function AssemblerPanel({ progression, onCraft, onClose }) {
           <span>Use the completed objects directly in the room.</span>
         </div>
       )}
+
+      <div className="assembler-key-help">A / D SELECT · E ASSEMBLE · BACKSPACE CLOSE</div>
     </section>
   )
 }
