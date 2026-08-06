@@ -1,8 +1,16 @@
+.difficulty-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 90;
+  background: rgba(5, 8, 8, 0.16);
+  outline: none;
+}
+
 .apparatus-difficulty-selector {
   position: absolute;
   left: 50%;
   bottom: 28px;
-  z-index: 90;
+  z-index: 1;
   width: min(760px, calc(100% - 36px));
   transform: translateX(-50%);
   padding: 15px 18px 16px;
