@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { APPARATUS_CONFIG } from '../game/config.js'
-import { enemyWorldPosition } from '../game/world.js'
 import { segmentIntersectsSphere } from '../game/projectileMath.js'
+import { isCombatPhase } from '../game/simulation.js'
+import { combatTargets } from '../game/targets.js'
 
 const FORWARD = new THREE.Vector3(0, 0, -1)
 const FAR_AIM_DEPTH = 1
@@ -45,7 +46,7 @@ export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit })
       direction: new THREE.Vector3(),
       start: new THREE.Vector3(),
       end: new THREE.Vector3(),
-      enemy: new THREE.Vector3(),
+      targetPosition: new THREE.Vector3(),
       projected: new THREE.Vector3(),
       desired: new THREE.Vector3(),
       quaternion: new THREE.Quaternion(),
@@ -56,7 +57,7 @@ export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit })
   useEffect(() => {
     if (!shotRequest || shotRequest.id === lastShotRef.current) return
     lastShotRef.current = shotRequest.id
-    if (runRef.current.phase !== 'running') return
+    if (!isCombatPhase(runRef.current)) return
 
     const aim = shotRequest.aim
     scratch.muzzle
@@ -64,8 +65,6 @@ export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit })
       .applyQuaternion(camera.quaternion)
       .add(camera.position)
 
-    // Use the far end of the pointer ray. A mid-depth NDC point can sit between
-    // the camera and this offset muzzle, which reverses the shot back at the player.
     scratch.target.set(aim.x, aim.y, FAR_AIM_DEPTH).unproject(camera)
     scratch.direction.copy(scratch.target).sub(scratch.muzzle).normalize()
 
@@ -90,7 +89,7 @@ export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit })
     const run = runRef.current
     let changed = false
 
-    if (run.phase !== 'running' && projectilesRef.current.size) {
+    if (!isCombatPhase(run) && projectilesRef.current.size) {
       projectilesRef.current.clear()
       setIds([])
       return
@@ -100,17 +99,17 @@ export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit })
       projectile.age += delta
       scratch.start.copy(projectile.position)
 
-      if (projectile.homingStrength > 0 && run.enemies.length) {
+      const availableTargets = combatTargets(runRef.current)
+      if (projectile.homingStrength > 0 && availableTargets.length) {
         let nearest = null
         let nearestDistance = Infinity
-        for (const enemy of run.enemies) {
-          if (projectile.hitIds.has(enemy.id)) continue
-          const world = enemyWorldPosition(enemy, run)
-          scratch.enemy.set(world.x, world.y, world.z)
-          const distance = scratch.enemy.distanceToSquared(projectile.position)
+        for (const target of availableTargets) {
+          if (projectile.hitIds.has(target.id)) continue
+          scratch.targetPosition.set(target.position.x, target.position.y, target.position.z)
+          const distance = scratch.targetPosition.distanceToSquared(projectile.position)
           if (distance < nearestDistance) {
             nearestDistance = distance
-            nearest = scratch.enemy.clone()
+            nearest = scratch.targetPosition.clone()
           }
         }
         if (nearest) {
@@ -131,26 +130,27 @@ export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit })
         mesh.quaternion.copy(scratch.quaternion)
       }
 
-      for (const enemy of [...runRef.current.enemies]) {
-        if (projectile.hitIds.has(enemy.id)) continue
-        const world = enemyWorldPosition(enemy, runRef.current)
-        scratch.enemy.set(world.x, world.y, world.z)
-        const hitRadius = APPARATUS_CONFIG.ENEMY_HIT_RADIUS + projectile.radius
-        if (!segmentIntersectsSphere(scratch.start, scratch.end, scratch.enemy, hitRadius)) continue
+      const currentTargets = combatTargets(runRef.current)
+      for (const target of currentTargets) {
+        if (projectile.hitIds.has(target.id)) continue
+        scratch.targetPosition.set(target.position.x, target.position.y, target.position.z)
+        const hitRadius = target.hitRadius + projectile.radius
+        if (!segmentIntersectsSphere(scratch.start, scratch.end, scratch.targetPosition, hitRadius)) continue
 
-        projectile.hitIds.add(enemy.id)
-        scratch.projected.copy(scratch.enemy).project(camera)
-        onHit(enemy.id, enemy.pattern, {
+        projectile.hitIds.add(target.id)
+        scratch.projected.copy(scratch.targetPosition).project(camera)
+        onHit(target, {
           x: (scratch.projected.x * 0.5 + 0.5) * size.width,
           y: (-scratch.projected.y * 0.5 + 0.5) * size.height,
         })
 
         if (projectile.pierceRemaining > 0) {
           projectile.pierceRemaining -= 1
-        } else {
-          projectilesRef.current.delete(id)
-          changed = true
+          continue
         }
+
+        projectilesRef.current.delete(id)
+        changed = true
         break
       }
 
