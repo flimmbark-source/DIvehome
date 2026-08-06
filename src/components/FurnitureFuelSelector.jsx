@@ -13,7 +13,7 @@ function initialShape(progression, furnitureId) {
 }
 
 function recaptureMouse() {
-  document.getElementById('root')?.requestPointerLock?.()
+  if (!document.pointerLockElement) document.getElementById('root')?.requestPointerLock?.()
 }
 
 export default function FurnitureFuelSelector({
@@ -68,11 +68,16 @@ export default function FurnitureFuelSelector({
         event.preventDefault()
         confirm()
       }
+      if (event.code === 'Backspace') {
+        event.preventDefault()
+        recaptureMouse()
+        onClose()
+      }
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [confirm, cycle])
+  }, [confirm, cycle, onClose])
 
   const status = useMemo(() => {
     if (isLoaded) return 'CURRENTLY LOADED'
@@ -128,7 +133,7 @@ export default function FurnitureFuelSelector({
       </div>
 
       <div className="furniture-selector-footer">
-        <span>← → CYCLE · E / ENTER LOAD · ESC CLOSE</span>
+        <span>← → CYCLE · E / ENTER LOAD · BACKSPACE CLOSE</span>
         {loadedShape && (
           <button type="button" onClick={unload}>
             UNLOAD {SHAPE_META[loadedShape].label}
