@@ -6,8 +6,77 @@ import {
 } from '../game/progression.js'
 import { FIRE_MODES, fireModeFor } from '../game/weapon.js'
 
+const PARTS = Object.freeze(['body', 'clip', 'muzzle'])
+
 function nextIndex(current, direction, length) {
   return (current + direction + length) % length
+}
+
+function initialShapeIndex(shape) {
+  return Math.max(0, SHAPE_KEYS.indexOf(shape))
+}
+
+function ResourceCallout({
+  active,
+  className,
+  partLabel,
+  sourceLabel,
+  furnitureId,
+  built,
+  loadedShape,
+  selectedShape,
+  inventory,
+  onActivate,
+  onCycle,
+  onConfirm,
+}) {
+  const selectedMeta = SHAPE_META[selectedShape]
+  const loadedMeta = loadedShape ? SHAPE_META[loadedShape] : null
+  const selectedCount = inventory?.[selectedShape] ?? 0
+  const selectedEffect = FURNITURE_FUEL_EFFECTS[furnitureId][selectedShape]
+  const loadedEffect = loadedShape
+    ? FURNITURE_FUEL_EFFECTS[furnitureId][loadedShape]
+    : `NO ${partLabel} RESOURCE LOADED`
+  const canLoad = built && (loadedShape === selectedShape || selectedCount > 0)
+
+  return (
+    <article
+      className={`gun-callout ${className} ${active ? 'is-active' : ''}`}
+      style={{ '--shape-color': selectedMeta.color }}
+      onPointerDown={onActivate}
+    >
+      <span>{partLabel} · {sourceLabel}</span>
+      <strong style={{ color: loadedMeta?.color ?? '#7b8580' }}>
+        {loadedMeta ? `${loadedMeta.symbol} ${loadedMeta.label}` : 'EMPTY'}
+      </strong>
+      <small>{loadedEffect}</small>
+
+      <div className="gun-option-cycle">
+        <button type="button" onClick={() => onCycle(-1)} aria-label={`Previous ${partLabel.toLowerCase()} resource`}>‹</button>
+        <div>
+          <b style={{ color: selectedMeta.color }}>{selectedMeta.symbol} {selectedMeta.label}</b>
+          <em>{selectedEffect}</em>
+          <small>{selectedCount} STORED</small>
+        </div>
+        <button type="button" onClick={() => onCycle(1)} aria-label={`Next ${partLabel.toLowerCase()} resource`}>›</button>
+      </div>
+
+      <button
+        className="gun-load-button"
+        type="button"
+        disabled={!canLoad}
+        onClick={onConfirm}
+      >
+        {!built
+          ? `BUILD ${sourceLabel} TO UNLOCK`
+          : loadedShape === selectedShape
+            ? `UNLOAD ${partLabel}`
+            : selectedCount > 0
+              ? `LOAD ${partLabel}`
+              : 'NO SHAPE AVAILABLE'}
+      </button>
+    </article>
+  )
 }
 
 export default function GunCustomizer({
@@ -17,18 +86,20 @@ export default function GunCustomizer({
   onFireMode,
   onClose,
 }) {
-  const loadedShape = progression.fuel?.workbench ?? null
-  const workbenchBuilt = Boolean(progression.built?.workbench)
-  const initialIndex = Math.max(0, SHAPE_KEYS.indexOf(loadedShape))
-  const [shapeIndex, setShapeIndex] = useState(initialIndex)
+  const loadedBodyShape = progression.fuel?.toaster ?? null
+  const loadedClipShape = progression.fuel?.workbench ?? null
+  const [activePart, setActivePart] = useState('body')
+  const [bodyIndex, setBodyIndex] = useState(() => initialShapeIndex(loadedBodyShape))
+  const [clipIndex, setClipIndex] = useState(() => initialShapeIndex(loadedClipShape))
   const rootRef = useRef(null)
-  const selectedShape = SHAPE_KEYS[shapeIndex]
-  const shapeMeta = SHAPE_META[selectedShape]
+
+  const selectedBodyShape = SHAPE_KEYS[bodyIndex]
+  const selectedClipShape = SHAPE_KEYS[clipIndex]
   const currentMode = fireModeFor(progression.weapon?.fireMode)
   const modeIndex = FIRE_MODES.indexOf(currentMode.id)
 
-  const cycleShape = useCallback((direction) => {
-    setShapeIndex((current) => nextIndex(current, direction, SHAPE_KEYS.length))
+  const cyclePart = useCallback((direction) => {
+    setActivePart((current) => PARTS[nextIndex(PARTS.indexOf(current), direction, PARTS.length)])
   }, [])
 
   const cycleMode = useCallback((direction) => {
@@ -36,27 +107,51 @@ export default function GunCustomizer({
     onFireMode(nextMode)
   }, [modeIndex, onFireMode])
 
-  const loadSelected = useCallback(() => {
-    if (!workbenchBuilt) return
-    if (loadedShape === selectedShape) onClearFuel('workbench')
-    else onFuel('workbench', selectedShape)
-  }, [loadedShape, onClearFuel, onFuel, selectedShape, workbenchBuilt])
+  const cycleActiveOption = useCallback((direction) => {
+    if (activePart === 'body') {
+      setBodyIndex((current) => nextIndex(current, direction, SHAPE_KEYS.length))
+      return
+    }
+    if (activePart === 'clip') {
+      setClipIndex((current) => nextIndex(current, direction, SHAPE_KEYS.length))
+      return
+    }
+    cycleMode(direction)
+  }, [activePart, cycleMode])
+
+  const toggleResource = useCallback((furnitureId, selectedShape) => {
+    const built = Boolean(progression.built?.[furnitureId])
+    const loadedShape = progression.fuel?.[furnitureId] ?? null
+    const selectedCount = progression.inventory?.[selectedShape] ?? 0
+    if (!built) return
+    if (loadedShape === selectedShape) {
+      onClearFuel(furnitureId)
+      return
+    }
+    if (selectedCount > 0) onFuel(furnitureId, selectedShape)
+  }, [onClearFuel, onFuel, progression])
+
+  const confirmActive = useCallback(() => {
+    if (activePart === 'body') {
+      toggleResource('toaster', selectedBodyShape)
+      return
+    }
+    if (activePart === 'clip') {
+      toggleResource('workbench', selectedClipShape)
+      return
+    }
+    cycleMode(1)
+  }, [activePart, cycleMode, selectedBodyShape, selectedClipShape, toggleResource])
 
   useEffect(() => {
     rootRef.current?.focus()
   }, [])
 
-  const selectedCount = progression.inventory?.[selectedShape] ?? 0
-  const canLoad = workbenchBuilt && (loadedShape === selectedShape || selectedCount > 0)
-  const effect = FURNITURE_FUEL_EFFECTS.workbench[selectedShape]
-  const loadedMeta = loadedShape ? SHAPE_META[loadedShape] : null
-  const loadedEffect = loadedShape ? FURNITURE_FUEL_EFFECTS.workbench[loadedShape] : 'NO TOOLING LOADED'
-
   const modeDescription = useMemo(() => {
     if (currentMode.id === 'hitscan') {
-      return 'ONE IMMEDIATE RAY · PROJECTILE SIZE, SPEED, AND GUIDANCE TOOLING DO NOT APPLY'
+      return 'ONE IMMEDIATE RAY · CLIP SIZE, SPEED, AND GUIDANCE MODIFIERS DO NOT APPLY'
     }
-    return 'THREE PHYSICAL ROUNDS · TOOLING MODIFIES EVERY ROUND IN THE BURST'
+    return 'THREE PHYSICAL ROUNDS · THE LOADED CLIP MODIFIES EVERY ROUND IN THE BURST'
   }, [currentMode.id])
 
   return (
@@ -67,13 +162,21 @@ export default function GunCustomizer({
       aria-label="Gun customization"
       onKeyDownCapture={(event) => {
         event.stopPropagation()
-        if (event.code === 'KeyA') {
+        if (event.code === 'KeyW' || event.code === 'ArrowUp') {
           event.preventDefault()
-          cycleShape(-1)
+          cyclePart(-1)
         }
-        if (event.code === 'KeyD') {
+        if (event.code === 'KeyS' || event.code === 'ArrowDown') {
           event.preventDefault()
-          cycleShape(1)
+          cyclePart(1)
+        }
+        if (event.code === 'KeyA' || event.code === 'ArrowLeft') {
+          event.preventDefault()
+          cycleActiveOption(-1)
+        }
+        if (event.code === 'KeyD' || event.code === 'ArrowRight') {
+          event.preventDefault()
+          cycleActiveOption(1)
         }
         if (event.code === 'KeyM') {
           event.preventDefault()
@@ -81,61 +184,70 @@ export default function GunCustomizer({
         }
         if (event.code === 'Enter' || event.code === 'KeyE') {
           event.preventDefault()
-          loadSelected()
+          confirmActive()
         }
-        if (event.code === 'Escape') {
+        if (event.code === 'Backspace') {
           event.preventDefault()
           onClose()
         }
       }}
     >
       <svg className="gun-callout-lines" viewBox="0 0 1000 600" preserveAspectRatio="none" aria-hidden="true">
-        <polyline points="330,210 420,210 487,270" />
-        <circle cx="487" cy="270" r="5" />
-        <polyline points="670,205 600,205 540,245" />
-        <circle cx="540" cy="245" r="5" />
+        <polyline points="315,165 410,165 497,255" />
+        <circle cx="497" cy="255" r="5" />
+        <polyline points="315,475 420,475 506,345" />
+        <circle cx="506" cy="345" r="5" />
+        <polyline points="685,250 610,250 548,274" />
+        <circle cx="548" cy="274" r="5" />
       </svg>
 
       <header className="gun-customizer-heading">
         <span>APPARATUS SIDEARM</span>
         <strong>CONFIGURE WEAPON</strong>
-        <button type="button" onClick={onClose}>CLOSE</button>
+        <button type="button" onClick={onClose}>BACKSPACE</button>
       </header>
 
-      <article className="gun-callout tooling-callout" style={{ '--shape-color': shapeMeta.color }}>
-        <span>TOOLING CORE</span>
-        <strong style={{ color: loadedMeta?.color ?? '#7b8580' }}>
-          {loadedMeta ? `${loadedMeta.symbol} ${loadedMeta.label}` : 'EMPTY'}
-        </strong>
-        <small>{loadedEffect}</small>
+      <ResourceCallout
+        active={activePart === 'body'}
+        className="body-callout"
+        partLabel="BODY"
+        sourceLabel="TOASTER"
+        furnitureId="toaster"
+        built={Boolean(progression.built?.toaster)}
+        loadedShape={loadedBodyShape}
+        selectedShape={selectedBodyShape}
+        inventory={progression.inventory}
+        onActivate={() => setActivePart('body')}
+        onCycle={(direction) => {
+          setActivePart('body')
+          setBodyIndex((current) => nextIndex(current, direction, SHAPE_KEYS.length))
+        }}
+        onConfirm={() => toggleResource('toaster', selectedBodyShape)}
+      />
 
-        <div className="gun-option-cycle">
-          <button type="button" onClick={() => cycleShape(-1)} aria-label="Previous shape">‹</button>
-          <div>
-            <b style={{ color: shapeMeta.color }}>{shapeMeta.symbol} {shapeMeta.label}</b>
-            <em>{effect}</em>
-            <small>{selectedCount} STORED</small>
-          </div>
-          <button type="button" onClick={() => cycleShape(1)} aria-label="Next shape">›</button>
-        </div>
+      <ResourceCallout
+        active={activePart === 'clip'}
+        className="clip-callout"
+        partLabel="CLIP"
+        sourceLabel="WORKBENCH"
+        furnitureId="workbench"
+        built={Boolean(progression.built?.workbench)}
+        loadedShape={loadedClipShape}
+        selectedShape={selectedClipShape}
+        inventory={progression.inventory}
+        onActivate={() => setActivePart('clip')}
+        onCycle={(direction) => {
+          setActivePart('clip')
+          setClipIndex((current) => nextIndex(current, direction, SHAPE_KEYS.length))
+        }}
+        onConfirm={() => toggleResource('workbench', selectedClipShape)}
+      />
 
-        <button
-          className="gun-load-button"
-          type="button"
-          disabled={!canLoad}
-          onClick={loadSelected}
-        >
-          {!workbenchBuilt
-            ? 'BUILD WORKBENCH TO UNLOCK'
-            : loadedShape === selectedShape
-              ? 'UNLOAD TOOLING'
-              : selectedCount > 0
-                ? 'LOAD SELECTED SHAPE'
-                : 'NO SHAPE AVAILABLE'}
-        </button>
-      </article>
-
-      <article className="gun-callout muzzle-callout" style={{ '--mode-color': currentMode.color }}>
+      <article
+        className={`gun-callout muzzle-callout ${activePart === 'muzzle' ? 'is-active' : ''}`}
+        style={{ '--mode-color': currentMode.color }}
+        onPointerDown={() => setActivePart('muzzle')}
+      >
         <span>MUZZLE TIP</span>
         <strong style={{ color: currentMode.color }}>{currentMode.label}</strong>
         <small>{currentMode.description}</small>
@@ -151,7 +263,7 @@ export default function GunCustomizer({
       </article>
 
       <footer className="gun-customizer-help">
-        <span>A / D SELECT TOOLING · E LOAD · M SWITCH MODE · ESC CLOSE</span>
+        <span>W / S SELECT PART · A / D CHANGE · E LOAD · M SWITCH MODE · BACKSPACE CLOSE</span>
       </footer>
     </section>
   )
