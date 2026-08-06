@@ -5,8 +5,11 @@ import useGameAudio from '../audio/useGameAudio.js'
 import { FURNITURE_RECIPES, SHAPE_KEYS, SHAPE_META } from '../game/progression.js'
 import AssemblerPanel from './AssemblerPanel.jsx'
 import FurnitureFuelSelector from './FurnitureFuelSelector.jsx'
+import GunCustomizer from './GunCustomizer.jsx'
+import WeaponMesh from './WeaponMesh.jsx'
 
 const APPARATUS_POSITION = new THREE.Vector3(0, 0, -4.4)
+const GUN_HOLSTER_POSITION = new THREE.Vector3(1.05, 0, -4.12)
 const ASSEMBLER_POSITION = new THREE.Vector3(3.7, 0, -2.8)
 const TOASTER_POSITION = new THREE.Vector3(-3.55, 0, -4.45)
 const WORKBENCH_POSITION = new THREE.Vector3(-3.65, 0, -1.65)
@@ -35,8 +38,6 @@ function PlayerRig({
   const rightRef = useRef(new THREE.Vector3())
   const movementRef = useRef(new THREE.Vector3())
 
-  // Camera initialization is intentionally independent from controlsEnabled.
-  // Opening an interface disables input, but must never reset the player pose.
   useEffect(() => {
     const pose = roomPoseRef.current ?? { x: 0, z: 3.4, yaw: 0, pitch: -0.04 }
     yawRef.current = pose.yaw
@@ -141,7 +142,10 @@ function PlayerRig({
     roomPoseRef.current.yaw = yawRef.current
     roomPoseRef.current.pitch = pitchRef.current
 
-    const targets = [{ id: 'apparatus', position: APPARATUS_POSITION, reach: 2.65 }]
+    const targets = [
+      { id: 'apparatus', position: APPARATUS_POSITION, reach: 2.45 },
+      { id: 'gun', position: GUN_HOLSTER_POSITION, reach: 1.55 },
+    ]
     if (mechanismUnlocked) targets.push({ id: 'assembler', position: ASSEMBLER_POSITION, reach: 2.45 })
     if (built?.toaster) targets.push({ id: 'toaster', position: TOASTER_POSITION, reach: 2.25 })
     if (built?.workbench) targets.push({ id: 'workbench', position: WORKBENCH_POSITION, reach: 2.55 })
@@ -168,7 +172,7 @@ function PlayerRig({
   return null
 }
 
-function Apparatus({ active }) {
+function Apparatus({ active, gunActive, progression, inspectingGun }) {
   const rootRef = useRef()
   const screenRef = useRef()
 
@@ -207,6 +211,73 @@ function Apparatus({ active }) {
           <meshLambertMaterial color="#3c4142" flatShading />
         </mesh>
       ))}
+
+      <group position={[1.02, 1.04, 0.45]} rotation={[0.08, -0.12, Math.PI / 2]}>
+        <mesh position={[0, 0, 0.03]}>
+          <boxGeometry args={[0.7, 1.1, 0.12]} />
+          <meshStandardMaterial
+            color={gunActive ? '#4c5c56' : '#252b29'}
+            emissive={gunActive ? '#75ffc0' : '#101413'}
+            emissiveIntensity={gunActive ? 0.7 : 0.18}
+            flatShading
+          />
+        </mesh>
+        {!inspectingGun && (
+          <group position={[0, 0, 0.14]} scale={0.62}>
+            <WeaponMesh
+              fireMode={progression.weapon?.fireMode}
+              loadedShape={progression.fuel?.workbench}
+            />
+          </group>
+        )}
+      </group>
+    </group>
+  )
+}
+
+function GunInspectionRig({ fireMode, loadedShape }) {
+  const groupRef = useRef()
+  const progressRef = useRef(0)
+  const { camera } = useThree()
+  const transforms = useMemo(
+    () => ({
+      start: new THREE.Vector3(0.86, -0.58, -1.18),
+      end: new THREE.Vector3(0, -0.08, -2.05),
+      local: new THREE.Vector3(),
+      world: new THREE.Vector3(),
+      localQuaternion: new THREE.Quaternion(),
+      worldQuaternion: new THREE.Quaternion(),
+      euler: new THREE.Euler(),
+    }),
+    [],
+  )
+
+  useFrame((_, rawDelta) => {
+    const group = groupRef.current
+    if (!group) return
+    const delta = Math.min(rawDelta, 0.05)
+    progressRef.current = THREE.MathUtils.damp(progressRef.current, 1, 7.5, delta)
+    const progress = progressRef.current
+    const eased = THREE.MathUtils.smoothstep(progress, 0, 1)
+
+    transforms.local.copy(transforms.start).lerp(transforms.end, eased)
+    transforms.world.copy(transforms.local).applyQuaternion(camera.quaternion).add(camera.position)
+    group.position.copy(transforms.world)
+
+    transforms.euler.set(-0.08, 0.22 * (1 - eased), Math.PI * 0.72 * (1 - eased), 'YXZ')
+    transforms.localQuaternion.setFromEuler(transforms.euler)
+    transforms.worldQuaternion.copy(camera.quaternion).multiply(transforms.localQuaternion)
+    group.quaternion.slerp(transforms.worldQuaternion, 1 - Math.exp(-delta * 18))
+    group.scale.setScalar(Math.max(0.001, eased * 1.45))
+  })
+
+  return (
+    <group ref={groupRef} renderOrder={45}>
+      <WeaponMesh
+        depthTest={false}
+        fireMode={fireMode}
+        loadedShape={loadedShape}
+      />
     </group>
   )
 }
@@ -313,6 +384,7 @@ function BuiltFurniture({ progression, activeId }) {
 
 function WhiteRoom({ focusId, activeInterface, progression }) {
   const activeId = activeInterface ?? focusId
+  const inspectingGun = activeInterface === 'gun'
   return (
     <>
       <color attach="background" args={['#d8d7d0']} />
@@ -337,9 +409,20 @@ function WhiteRoom({ focusId, activeInterface, progression }) {
         <meshLambertMaterial color="#d7d5cc" flatShading />
       </mesh>
 
-      <Apparatus active={activeId === 'apparatus'} />
+      <Apparatus
+        active={activeId === 'apparatus'}
+        gunActive={activeId === 'gun'}
+        progression={progression}
+        inspectingGun={inspectingGun}
+      />
       {progression.mechanismUnlocked && <Assembler active={activeId === 'assembler'} />}
       <BuiltFurniture progression={progression} activeId={activeId} />
+      {inspectingGun && (
+        <GunInspectionRig
+          fireMode={progression.weapon?.fireMode}
+          loadedShape={progression.fuel?.workbench}
+        />
+      )}
     </>
   )
 }
@@ -351,6 +434,7 @@ export default function WhiteSpace({
   onCraft,
   onFuel,
   onClearFuel,
+  onWeaponFireMode,
 }) {
   const [focusId, setFocusId] = useState(null)
   const [pointerLocked, setPointerLocked] = useState(Boolean(document.pointerLockElement))
@@ -385,6 +469,7 @@ export default function WhiteSpace({
   const useFocused = useCallback(() => {
     if (interfaceOpen) return
     if (focusId === 'apparatus') useApparatus()
+    if (focusId === 'gun') openInterface('gun')
     if (focusId === 'assembler') openInterface('assembler')
     if (focusId === 'toaster' || focusId === 'workbench') openInterface(focusId)
   }, [focusId, interfaceOpen, openInterface, useApparatus])
@@ -403,6 +488,7 @@ export default function WhiteSpace({
 
   const prompt = useMemo(() => {
     if (focusId === 'apparatus') return { title: 'THE APPARATUS', action: 'PRESS E TO ENTER' }
+    if (focusId === 'gun') return { title: 'APPARATUS SIDEARM', action: 'PRESS E TO CONFIGURE' }
     if (focusId === 'assembler') return { title: 'THE ASSEMBLER', action: 'PRESS E TO BUILD' }
     if (focusId === 'toaster' || focusId === 'workbench') {
       return { title: FURNITURE_RECIPES[focusId].label, action: 'PRESS E TO LOAD FUEL' }
@@ -468,6 +554,16 @@ export default function WhiteSpace({
           progression={progression}
           onFuel={onFuel}
           onClearFuel={onClearFuel}
+          onClose={closeInterface}
+        />
+      )}
+
+      {activeInterface === 'gun' && (
+        <GunCustomizer
+          progression={progression}
+          onFuel={onFuel}
+          onClearFuel={onClearFuel}
+          onFireMode={onWeaponFireMode}
           onClose={closeInterface}
         />
       )}
