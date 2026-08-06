@@ -3,7 +3,6 @@ import {
   SHAPE_KEYS,
   SHAPE_META,
   canAffordRecipe,
-  furnitureFuelEffect,
 } from '../game/progression.js'
 
 function Cost({ cost, inventory }) {
@@ -22,54 +21,11 @@ function Cost({ cost, inventory }) {
   )
 }
 
-function FuelControls({ furnitureId, inventory, loadedShape, onFuel, onClearFuel }) {
-  const loadedMeta = loadedShape ? SHAPE_META[loadedShape] : null
-  const loadedEffect = loadedShape ? furnitureFuelEffect(furnitureId, loadedShape) : ''
-
-  return (
-    <div className="fuel-controls">
-      <div className="fuel-current">
-        <span>LOADED FUEL</span>
-        <strong
-          className={loadedShape ? 'is-loaded' : ''}
-          style={loadedMeta
-            ? { color: loadedMeta.color, textShadow: '1px 1px 0 #202425' }
-            : undefined}
-        >
-          {loadedMeta
-            ? `${loadedMeta.symbol} ${loadedMeta.label} — ${loadedEffect}`
-            : 'EMPTY'}
-        </strong>
-        {loadedShape && (
-          <button type="button" onClick={() => onClearFuel(furnitureId)}>
-            UNLOAD
-          </button>
-        )}
-      </div>
-      <div className="fuel-options">
-        {SHAPE_KEYS.map((shape) => {
-          const meta = SHAPE_META[shape]
-          const disabled = (inventory?.[shape] ?? 0) <= 0 || loadedShape === shape
-          return (
-            <button
-              key={shape}
-              type="button"
-              disabled={disabled}
-              onClick={() => onFuel(furnitureId, shape)}
-              style={{ '--shape-color': meta.color }}
-            >
-              <span>{meta.symbol}</span>
-              <strong>{meta.label}</strong>
-              <small>{inventory?.[shape] ?? 0} STORED</small>
-            </button>
-          )
-        })}
-      </div>
-    </div>
+export default function AssemblerPanel({ progression, onCraft, onClose }) {
+  const unbuiltRecipes = Object.values(FURNITURE_RECIPES).filter(
+    (recipe) => !progression.built?.[recipe.id],
   )
-}
 
-export default function AssemblerPanel({ progression, onCraft, onFuel, onClearFuel, onClose }) {
   return (
     <section className="assembler-panel" aria-label="Shape assembler">
       <header>
@@ -96,42 +52,35 @@ export default function AssemblerPanel({ progression, onCraft, onFuel, onClearFu
       </div>
 
       <p className="assembler-explanation">
-        Build room objects from recovered shapes. A built object can hold one additional shape as fuel.
-        Loaded fuel is consumed when the next Apparatus run begins.
+        Combine recovered shapes into room systems. Once assembled, an object leaves this inventory
+        and must be used directly in the White Space.
       </p>
 
-      <div className="recipe-grid">
-        {Object.values(FURNITURE_RECIPES).map((recipe) => {
-          const built = Boolean(progression.built?.[recipe.id])
-          const affordable = canAffordRecipe(progression.inventory, recipe.id)
-          return (
-            <article key={recipe.id} className={`recipe-card ${built ? 'is-built' : ''}`}>
-              <div className="recipe-heading">
-                <span>{recipe.category}</span>
-                <h2>{recipe.label}</h2>
-              </div>
-              <p>{recipe.description}</p>
-
-              {!built ? (
-                <>
-                  <Cost cost={recipe.cost} inventory={progression.inventory} />
-                  <button type="button" disabled={!affordable} onClick={() => onCraft(recipe.id)}>
-                    {affordable ? 'ASSEMBLE' : 'INSUFFICIENT SHAPES'}
-                  </button>
-                </>
-              ) : (
-                <FuelControls
-                  furnitureId={recipe.id}
-                  inventory={progression.inventory}
-                  loadedShape={progression.fuel?.[recipe.id] ?? null}
-                  onFuel={onFuel}
-                  onClearFuel={onClearFuel}
-                />
-              )}
-            </article>
-          )
-        })}
-      </div>
+      {unbuiltRecipes.length > 0 ? (
+        <div className="recipe-grid assembler-inventory-grid">
+          {unbuiltRecipes.map((recipe) => {
+            const affordable = canAffordRecipe(progression.inventory, recipe.id)
+            return (
+              <article key={recipe.id} className="recipe-card assembler-inventory-item">
+                <div className="recipe-heading">
+                  <span>{recipe.category}</span>
+                  <h2>{recipe.label}</h2>
+                </div>
+                <p>{recipe.description}</p>
+                <Cost cost={recipe.cost} inventory={progression.inventory} />
+                <button type="button" disabled={!affordable} onClick={() => onCraft(recipe.id)}>
+                  {affordable ? 'ASSEMBLE' : 'INSUFFICIENT SHAPES'}
+                </button>
+              </article>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="assembler-empty">
+          <strong>NO UNBUILT SYSTEMS REMAIN</strong>
+          <span>Use the completed objects directly in the room.</span>
+        </div>
+      )}
     </section>
   )
 }
