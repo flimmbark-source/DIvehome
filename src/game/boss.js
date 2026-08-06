@@ -1,4 +1,5 @@
 import { APPARATUS_CONFIG, ENEMY_PATTERNS } from './config.js'
+import { difficultyFor } from './difficulty.js'
 
 const FACE_MASK = Object.freeze([
   '  XXXXX  ',
@@ -23,7 +24,7 @@ function buildFacePieces(config) {
   const pieces = []
 
   FACE_MASK.forEach((row, rowIndex) => {
-    [...row].forEach((cell, columnIndex) => {
+    ;[...row].forEach((cell, columnIndex) => {
       if (cell !== 'X') return
       const index = pieces.length
       pieces.push({
@@ -63,13 +64,15 @@ function buildTentacles(config) {
   }))
 }
 
-export function createBoss(config = APPARATUS_CONFIG) {
+export function createBoss(config = APPARATUS_CONFIG, difficultyLevel = 0) {
+  const difficulty = difficultyFor(difficultyLevel)
   return {
     elapsed: 0,
     regenClock: 0,
     regenPulse: 0,
     tentacleBreakPulse: 0,
     defeated: false,
+    difficultyLevel: difficulty.level,
     facePieces: buildFacePieces(config),
     tentacles: buildTentacles(config),
   }
@@ -155,6 +158,7 @@ export function bossCombatTargets(boss, config = APPARATUS_CONFIG) {
 export function advanceBoss(boss, deltaSeconds, config = APPARATUS_CONFIG) {
   if (!boss || boss.defeated) return { boss, attacks: 0 }
 
+  const difficulty = difficultyFor(boss.difficultyLevel)
   const delta = Math.max(0, Math.min(deltaSeconds, 0.05))
   const elapsed = boss.elapsed + delta
   if (elapsed < config.BOSS_INTRO_SECONDS) {
@@ -162,6 +166,7 @@ export function advanceBoss(boss, deltaSeconds, config = APPARATUS_CONFIG) {
   }
 
   let attacks = 0
+  const tentacleTravelSeconds = config.BOSS_TENTACLE_TRAVEL_SECONDS / difficulty.bossTempoMultiplier
   const tentacles = boss.tentacles.map((tentacle, tentacleIndex) => {
     if (tentacle.destroyed) return tentacle
 
@@ -170,12 +175,14 @@ export function advanceBoss(boss, deltaSeconds, config = APPARATUS_CONFIG) {
     let attackPulse = tentacle.attackPulse
 
     if (cooldown <= 0) {
-      extension += delta / config.BOSS_TENTACLE_TRAVEL_SECONDS
+      extension += delta / tentacleTravelSeconds
       if (extension >= 1) {
         attacks += 1
         attackPulse += 1
         extension = 0.08
-        cooldown = config.BOSS_TENTACLE_COOLDOWN_SECONDS + tentacleIndex * 0.22
+        cooldown =
+          (config.BOSS_TENTACLE_COOLDOWN_SECONDS + tentacleIndex * 0.22) /
+          difficulty.bossTempoMultiplier
       }
     }
 
@@ -183,7 +190,10 @@ export function advanceBoss(boss, deltaSeconds, config = APPARATUS_CONFIG) {
   })
 
   const remainingTentacles = tentacles.filter((tentacle) => !tentacle.destroyed).length
-  const interval = config.BOSS_REGEN_INTERVALS[remainingTentacles] ?? Number.POSITIVE_INFINITY
+  const baseInterval = config.BOSS_REGEN_INTERVALS[remainingTentacles] ?? Number.POSITIVE_INFINITY
+  const interval = Number.isFinite(baseInterval)
+    ? baseInterval / difficulty.bossRegenMultiplier
+    : Number.POSITIVE_INFINITY
   let regenClock = boss.regenClock + delta
   let regenPulse = boss.regenPulse
   let facePieces = boss.facePieces
