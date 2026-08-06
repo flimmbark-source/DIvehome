@@ -7,6 +7,7 @@ import {
   bossRegenerationLabel,
   createBoss,
   destroyBossTarget,
+  tentacleSegmentPosition,
 } from '../src/game/boss.js'
 
 function stepBoss(boss, seconds) {
@@ -70,6 +71,19 @@ test('destroying every tentacle turns regeneration off', () => {
   boss = destroyBossTarget(boss, pieceId).boss
   boss = stepBoss(boss, 4)
   assert.equal(boss.facePieces[0].active, false)
+})
+
+test('a damaged tentacle redistributes its surviving shapes to retain a visible attacking tip', () => {
+  let boss = createBoss()
+  const segmentIdsToDestroy = boss.tentacles[0].segments.slice(1).map((segment) => segment.id)
+  for (const segmentId of segmentIdsToDestroy) {
+    boss = destroyBossTarget(boss, segmentId).boss
+  }
+
+  const tentacle = { ...boss.tentacles[0], extension: 1 }
+  const remainingSegment = tentacle.segments.find((segment) => segment.alive)
+  const position = tentacleSegmentPosition(tentacle, remainingSegment, boss)
+  assert.ok(Math.abs(position.z - APPARATUS_CONFIG.BOSS_TENTACLE_NEAR_Z) < 0.000001)
 })
 
 test('the boss is defeated only when every active face socket is destroyed', () => {
