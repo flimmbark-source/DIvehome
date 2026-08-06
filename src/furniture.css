@@ -1,3 +1,7 @@
+.assembler-panel:focus {
+  outline: none;
+}
+
 .assembler-inventory-grid {
   align-items: stretch;
 }
@@ -7,8 +11,22 @@
   flex-direction: column;
 }
 
+.assembler-inventory-item.is-selected {
+  outline: 3px solid #202625;
+  outline-offset: 4px;
+  transform: translateY(-2px);
+}
+
 .assembler-inventory-item .recipe-cost {
   margin-top: auto;
+}
+
+.assembler-key-help {
+  margin-top: 18px;
+  color: #686b66;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-align: center;
 }
 
 .assembler-empty {
