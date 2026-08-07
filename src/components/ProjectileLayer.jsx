@@ -40,7 +40,6 @@ function ProjectileVisual({ projectileId, projectilesRef, meshRefs }) {
         <cylinderGeometry args={[radius * 0.2, radius * 0.75, radius * 4.8, 5]} />
         <meshBasicMaterial color="#ff8e45" transparent opacity={0.72} depthWrite={false} toneMapped={false} />
       </mesh>
-      <pointLight color="#ffd27a" intensity={3.5} distance={3.2} decay={2} />
     </group>
   )
 }
@@ -181,10 +180,12 @@ export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit })
   useFrame((_, rawDelta) => {
     const delta = Math.min(rawDelta, 0.05)
     const run = runRef.current
+    const combatActive = isCombatPhase(run)
+    const frameTargets = combatActive ? combatTargets(run) : []
     let changed = false
     let tracersChanged = false
 
-    if (!isCombatPhase(run) && projectilesRef.current.size) {
+    if (!combatActive && projectilesRef.current.size) {
       projectilesRef.current.clear()
       setIds([])
     }
@@ -201,21 +202,24 @@ export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit })
       projectile.age += delta
       scratch.start.copy(projectile.position)
 
-      const availableTargets = combatTargets(runRef.current)
-      if (projectile.homingStrength > 0 && availableTargets.length) {
-        let nearest = null
+      if (projectile.homingStrength > 0 && frameTargets.length) {
+        let nearestTarget = null
         let nearestDistance = Infinity
-        for (const target of availableTargets) {
+        for (const target of frameTargets) {
           if (projectile.hitIds.has(target.id)) continue
-          scratch.targetPosition.set(target.position.x, target.position.y, target.position.z)
-          const distance = scratch.targetPosition.distanceToSquared(projectile.position)
+          const distance = targetDistanceSquared(target, projectile.position)
           if (distance < nearestDistance) {
             nearestDistance = distance
-            nearest = scratch.targetPosition.clone()
+            nearestTarget = target
           }
         }
-        if (nearest) {
-          scratch.desired.copy(nearest).sub(projectile.position).normalize()
+        if (nearestTarget) {
+          scratch.targetPosition.set(
+            nearestTarget.position.x,
+            nearestTarget.position.y,
+            nearestTarget.position.z,
+          )
+          scratch.desired.copy(scratch.targetPosition).sub(projectile.position).normalize()
           projectile.direction
             .lerp(scratch.desired, Math.min(1, projectile.homingStrength * delta))
             .normalize()
@@ -232,18 +236,37 @@ export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit })
         mesh.quaternion.copy(scratch.quaternion)
       }
 
-      const currentTargets = combatTargets(runRef.current)
-        .filter((target) => !projectile.hitIds.has(target.id))
-        .sort((a, b) => targetDistanceSquared(a, scratch.start) - targetDistanceSquared(b, scratch.start))
+      // Resolve only targets that actually intersect this short movement
+      // segment. Avoid rebuilding and sorting the whole target array for every
+      // projectile every frame; piercing performs at most one extra scan.
+      const maximumSegmentHits = 1 + projectile.pierceRemaining
+      for (let hitIndex = 0; hitIndex < maximumSegmentHits; hitIndex += 1) {
+        let nearestHit = null
+        let nearestHitDistance = Infinity
 
-      for (const target of currentTargets) {
-        scratch.targetPosition.set(target.position.x, target.position.y, target.position.z)
-        const hitRadius = target.hitRadius + projectile.radius
-        if (!segmentIntersectsSphere(scratch.start, scratch.end, scratch.targetPosition, hitRadius)) continue
+        for (const target of frameTargets) {
+          if (projectile.hitIds.has(target.id)) continue
+          scratch.targetPosition.set(target.position.x, target.position.y, target.position.z)
+          const hitRadius = target.hitRadius + projectile.radius
+          if (!segmentIntersectsSphere(scratch.start, scratch.end, scratch.targetPosition, hitRadius)) continue
 
-        projectile.hitIds.add(target.id)
+          const distance = targetDistanceSquared(target, scratch.start)
+          if (distance < nearestHitDistance) {
+            nearestHitDistance = distance
+            nearestHit = target
+          }
+        }
+
+        if (!nearestHit) break
+
+        projectile.hitIds.add(nearestHit.id)
+        scratch.targetPosition.set(
+          nearestHit.position.x,
+          nearestHit.position.y,
+          nearestHit.position.z,
+        )
         scratch.projected.copy(scratch.targetPosition).project(camera)
-        onHit(target, {
+        onHit(nearestHit, {
           x: (scratch.projected.x * 0.5 + 0.5) * size.width,
           y: (-scratch.projected.y * 0.5 + 0.5) * size.height,
         })
