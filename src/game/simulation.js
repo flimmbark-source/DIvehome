@@ -164,9 +164,14 @@ function absorbHits(state, incomingHits) {
 
 function normalizedCraftPosition(controls, config) {
   const craft = controls?.craftPosition ?? { x: 0, y: 0 }
+  const visualOffsetY = config.CRAFT_CURSOR_Y_OFFSET ?? 0
   return {
     x: clamp(Number.isFinite(craft.x) ? craft.x : 0, -config.CRAFT_MAX_X, config.CRAFT_MAX_X),
-    y: clamp(Number.isFinite(craft.y) ? craft.y : 0, -config.CRAFT_MAX_Y, config.CRAFT_MAX_Y),
+    y: clamp(
+      (Number.isFinite(craft.y) ? craft.y : 0) + visualOffsetY,
+      -config.CRAFT_MAX_Y,
+      config.CRAFT_MAX_Y,
+    ),
   }
 }
 
