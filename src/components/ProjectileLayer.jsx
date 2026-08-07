@@ -83,6 +83,7 @@ export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit })
   const scratch = useMemo(
     () => ({
       muzzle: new THREE.Vector3(),
+      muzzleOffset: new THREE.Vector3(),
       target: new THREE.Vector3(),
       direction: new THREE.Vector3(),
       start: new THREE.Vector3(),
@@ -109,6 +110,10 @@ export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit })
       Number.isFinite(origin.z)
     ) {
       scratch.muzzle.set(origin.x, origin.y, origin.z)
+      scratch.muzzleOffset
+        .set(0, APPARATUS_CONFIG.CRAFT_CURSOR_Y_OFFSET ?? 0, 0)
+        .applyQuaternion(camera.quaternion)
+      scratch.muzzle.add(scratch.muzzleOffset)
     } else {
       scratch.muzzle
         .set(0.42 + aim.x * 0.44, -0.42 + aim.y * 0.3, -1.62)
@@ -236,9 +241,6 @@ export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit })
         mesh.quaternion.copy(scratch.quaternion)
       }
 
-      // Resolve only targets that actually intersect this short movement
-      // segment. Avoid rebuilding and sorting the whole target array for every
-      // projectile every frame; piercing performs at most one extra scan.
       const maximumSegmentHits = 1 + projectile.pierceRemaining
       for (let hitIndex = 0; hitIndex < maximumSegmentHits; hitIndex += 1) {
         let nearestHit = null
