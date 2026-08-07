@@ -14,6 +14,7 @@ const FORWARD = new THREE.Vector3(0, 0, -1)
 const UP = new THREE.Vector3(0, 1, 0)
 const FAR_AIM_DEPTH = 1
 const HITSCAN_RANGE = 84
+const BASE_MUZZLE_DISTANCE = 1.18
 
 function targetDistanceSquared(target, point) {
   const dx = target.position.x - point.x
@@ -110,8 +111,13 @@ export default function ProjectileLayer({ shotRequest, runRef, loadout, onHit })
       Number.isFinite(origin.z)
     ) {
       scratch.muzzle.set(origin.x, origin.y, origin.z)
+      const visualScale = APPARATUS_CONFIG.CRAFT_VISUAL_SCALE ?? 1
       scratch.muzzleOffset
-        .set(0, APPARATUS_CONFIG.CRAFT_CURSOR_Y_OFFSET ?? 0, 0)
+        .set(
+          0,
+          APPARATUS_CONFIG.CRAFT_CURSOR_Y_OFFSET ?? 0,
+          BASE_MUZZLE_DISTANCE * (1 - visualScale),
+        )
         .applyQuaternion(camera.quaternion)
       scratch.muzzle.add(scratch.muzzleOffset)
     } else {
