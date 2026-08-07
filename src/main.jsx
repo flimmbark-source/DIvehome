@@ -22,21 +22,20 @@ window.addEventListener('mousedown', (event) => {
   }))
 })
 
-// White Space uses pointer lock for first-person look, but its interfaces are
-// real clickable menus. Release pointer lock only when one of those menus is
-// actually mounted so the system cursor appears. Every menu already recaptures
-// pointer lock when it closes, keeping the transition deliberate rather than
-// allowing the mouse to drift out of sync at arbitrary times.
-const WHITE_SPACE_MENU_SELECTOR = [
+// First-person play uses pointer lock, but menu/result surfaces need a normal
+// cursor. Release pointer lock only while one of those surfaces is mounted;
+// their close/return actions already recapture it where appropriate.
+const CURSOR_SURFACE_SELECTOR = [
   '.white-space-shell .assembler-panel',
   '.white-space-shell .furniture-fuel-selector',
   '.white-space-shell .gun-customizer',
   '.difficulty-overlay',
+  '.apparatus-shell .overwhelm-panel:not(.victory-panel)',
 ].join(', ')
 
 const menuCursorObserver = new MutationObserver(() => {
   if (!document.pointerLockElement) return
-  if (!document.querySelector(WHITE_SPACE_MENU_SELECTOR)) return
+  if (!document.querySelector(CURSOR_SURFACE_SELECTOR)) return
   document.exitPointerLock?.()
 })
 menuCursorObserver.observe(document.body, { childList: true, subtree: true })
