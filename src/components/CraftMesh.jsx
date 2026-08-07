@@ -1,5 +1,6 @@
 import { SHAPE_META } from '../game/progression.js'
 import { fireModeFor } from '../game/weapon.js'
+import { APPARATUS_CONFIG } from '../game/config.js'
 
 export default function CraftMesh({
   depthTest = true,
@@ -14,9 +15,10 @@ export default function CraftMesh({
   const clipColor = clipShape ? SHAPE_META[clipShape]?.color : '#7bffe0'
   const commonBasic = { depthTest, toneMapped: false }
   const commonStandard = { depthTest, flatShading: true, toneMapped: false }
+  const combatOffset = flashRef ? [0, APPARATUS_CONFIG.CRAFT_CURSOR_Y_OFFSET, 0] : [0, 0, 0]
 
   return (
-    <group>
+    <group position={combatOffset}>
       <mesh rotation={[Math.PI / 2, 0, 0]}>
         <coneGeometry args={[0.44, 1.55, 5]} />
         <meshStandardMaterial
@@ -66,8 +68,6 @@ export default function CraftMesh({
           color="#182d35"
           emissive="#65cde8"
           emissiveIntensity={0.58}
-          transparent
-          opacity={0.94}
           {...commonStandard}
         />
       </mesh>
