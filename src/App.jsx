@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import ApparatusDifficultySelector from './components/ApparatusDifficultySelector.jsx'
 import ApparatusRun from './components/ApparatusRun.jsx'
 import WhiteSpace from './components/WhiteSpace.jsx'
@@ -35,6 +35,12 @@ export default function App() {
   const [difficultyOpen, setDifficultyOpen] = useState(false)
   const [difficultyLevel, setDifficultyLevel] = useState(0)
   const roomPoseRef = useRef({ x: 0, z: 3.4, yaw: 0, pitch: -0.04 })
+
+  useEffect(() => {
+    const openApparatusMenu = () => setDifficultyOpen(true)
+    window.addEventListener('divehome-open-apparatus', openApparatusMenu)
+    return () => window.removeEventListener('divehome-open-apparatus', openApparatusMenu)
+  }, [])
 
   const startApparatus = (requestedLevel) => {
     const difficulty = difficultyFor(requestedLevel)
